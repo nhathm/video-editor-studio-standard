@@ -1,0 +1,7 @@
+{
+  "edition": "local-standard",
+  "runtime": "local",
+  "tier": "standard",
+  "include": ["core/nve", "skills/nve", "templates/core", "blocks/core", "packs", "engines.json"],
+  "exclude": ["core/tests", "**/__pycache__"]
+}

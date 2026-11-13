@@ -1,0 +1,35 @@
+{
+  "_doc": "Every shipped asset pack and its license. QC refuses to deliver a render that used an asset whose pack is not listed here or in the user's library meta.json.",
+  "packs": {
+    "sfx": {
+      "license": "Pixabay Content License",
+      "url": "https://pixabay.com/service/license-summary/",
+      "source": "HyperFrames media-use bundle (vendor/hyperframes/skills/media-use/audio/assets/sfx), see packs/sfx/CREDITS.md",
+      "attribution_required": false,
+      "tier": "standard"
+    },
+    "emoji-noto": {
+      "license": "CC BY 4.0",
+      "url": "https://github.com/googlefonts/noto-emoji",
+      "source": "https://fonts.gstatic.com/s/e/notoemoji/latest/<codepoint>/lottie.json",
+      "attribution_required": true,
+      "attribution": "Emoji: Google Noto (CC BY 4.0)",
+      "tier": "standard"
+    },
+    "fonts": {
+      "license": "SIL Open Font License 1.1",
+      "url": "https://openfontlicense.org",
+      "source": "github.com/google/fonts (ofl/), downloaded by `nve fonts sync`",
+      "attribution_required": false,
+      "tier": "standard"
+    },
+    "bgm": {
+      "license": "CC BY 4.0",
+      "url": "https://creativecommons.org/licenses/by/4.0/",
+      "source": "Kevin MacLeod, incompetech.com (see packs/bgm/bgm.json)",
+      "attribution_required": true,
+      "attribution": "see packs/bgm/bgm.json credit_template",
+      "tier": "standard"
+    }
+  }
+}

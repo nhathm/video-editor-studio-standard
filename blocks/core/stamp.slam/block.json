@@ -1,0 +1,20 @@
+{
+  "id": "core:stamp.slam",
+  "version": "1",
+  "kind": "overlay",
+  "label": {"vi": "Chữ to đập vào (stamp)", "en": "Slammed highlight stamp"},
+  "description": "Big outlined text slammed in (scale 2.3 -> 1, slight tilt) for a key idea, with Noto animated emoji above it. Use '|' for a line break. alt=true swaps text/shadow colours.",
+  "engines": ["hyperframes", "ass"],
+  "props": {
+    "text": {"type": "string", "required": true},
+    "emoji": {"type": "array", "default": [], "doc": "Noto codepoints, e.g. [\"1f9cb\"]"},
+    "alt": {"type": "boolean", "default": false},
+    "top": {"type": "number", "default": 0.05, "doc": "fraction of frame height"}
+  },
+  "min_duration": 0.8,
+  "default_sfx": [
+    {"asset": "lib:sfx/whoosh-short", "at": -0.05, "volume": 0.4},
+    {"asset": "lib:sfx/impact-bass-1", "at": 0.3, "volume": 0.25, "max": 0.8},
+    {"asset": "lib:sfx/pop", "at": 0.02, "volume": 0.4, "if": "emoji"}
+  ]
+}

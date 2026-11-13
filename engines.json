@@ -1,0 +1,21 @@
+{
+  "_doc": "Preference chain per capability. First available engine wins; on failure nve falls back to the next and says so. Pin one in studio.json or storyboard.json: {\"engines\": {\"compose\": \"ass\"}}.",
+  "chains": {
+    "transcribe": [
+      "scribe",
+      "whisper",
+      "faster-whisper"
+    ],
+    "cut": [
+      "ffmpeg"
+    ],
+    "key": [
+      "keyfill",
+      "greenkey"
+    ],
+    "compose": [
+      "hyperframes",
+      "ass"
+    ]
+  }
+}

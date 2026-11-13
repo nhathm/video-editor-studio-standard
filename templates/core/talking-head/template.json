@@ -1,0 +1,25 @@
+{
+  "id": "core:talking-head",
+  "version": "1",
+  "label": {"vi": "Nói trước camera", "en": "Talking head"},
+  "description": "One person talking to camera (sales, review, tips). The studio house style: karaoke captions, highlight stamps with Noto emoji on every key idea, SFX on every stamp/card, soft bgm, bright clean look with skin retouch.",
+  "cut_strategy": "speech",
+  "cut": {"gap": 0.45, "pad_in": 0.12, "pad_out": 0.20},
+  "defaults": {
+    "output": {"aspect": "9:16", "width": 1080, "height": 1920, "fps": 30, "speed": 1.0, "platform": "tiktok"},
+    "style": {
+      "look": "trong-tro",
+      "skin": true,
+      "font": {"title": "Montserrat", "caption": "Montserrat"},
+      "palette": {"ink": "#1F2A44", "accent": "#FFD84D", "text": "#FFFFFF", "spoken": "#9EE6FF"},
+      "caption": {"block": "core:caption.karaoke-pill", "group_min": 3, "group_max": 5, "top": 0.77, "keywords": []}
+    },
+    "audio": []
+  },
+  "suggest": {
+    "speed": 1.15,
+    "bgm_volume": 0.1,
+    "cta": "End with a CTA naming the person in the clip (e.g. 'INBOX <name>'), taken from the transcript."
+  },
+  "text_fixes": {}
+}

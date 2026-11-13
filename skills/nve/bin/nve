@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# nve CLI launcher. Works from the git repo, the Claude Code plugin and the cloud skill bundle,
+# on macOS, Linux and Windows (Git Bash, which Claude Code uses on Windows).
+SKILL_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/.." && pwd -P)"
+for root in "$SKILL_DIR/../.." "$SKILL_DIR"; do
+  if [ -f "$root/core/nve/__init__.py" ]; then ROOT="$(cd "$root" && pwd -P)"; break; fi
+done
+[ -z "$ROOT" ] && { echo "nve: cannot find core/ next to the skill" >&2; exit 1; }
+
+# Python: NVE_PYTHON > repo .venv (maintainers) > ~/.nve/venv (made by nve-setup) > python3 / python
+PY="${NVE_PYTHON:-}"
+if [ -z "$PY" ]; then
+  for c in "$ROOT/.venv/bin/python" "$ROOT/.venv/Scripts/python.exe" "$HOME/.nve/venv/bin/python" "$HOME/.nve/venv/Scripts/python.exe"; do
+    if [ -x "$c" ]; then PY="$c"; break; fi
+  done
+fi
+[ -z "$PY" ] && PY="$(command -v python3 || command -v python)"
+[ -z "$PY" ] && { echo "nve: Python 3.10+ not found. Run: bash \"$SKILL_DIR/bin/nve-setup\"" >&2; exit 1; }
+
+SEP=":"; case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) SEP=";";; esac
+CORE="$ROOT/core"
+if command -v cygpath >/dev/null 2>&1; then CORE="$(cygpath -w "$CORE")"; fi
+PYTHONPATH="$CORE${PYTHONPATH:+$SEP$PYTHONPATH}" PYTHONUTF8=1 exec "$PY" -m nve "$@"

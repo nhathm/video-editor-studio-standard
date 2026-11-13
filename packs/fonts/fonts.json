@@ -1,0 +1,22 @@
+{
+  "_doc": "Vietnamese-capable Google Fonts (SIL OFL). Downloaded by `nve fonts sync` into packs/fonts/<Family>/.",
+  "families": [
+    {"family": "Montserrat", "dir": "montserrat", "role": "title", "note": "studio default for stamps, captions, cards"},
+    {"family": "Be Vietnam Pro", "dir": "bevietnampro", "role": "title"},
+    {"family": "Anton", "dir": "anton", "role": "title"},
+    {"family": "Inter", "dir": "inter", "role": "caption"},
+    {"family": "Lexend", "dir": "lexend", "role": "caption"},
+    {"family": "Nunito", "dir": "nunito", "role": "fun"},
+    {"family": "Baloo 2", "dir": "baloo2", "role": "fun"},
+    {"family": "Playfair Display", "dir": "playfairdisplay", "role": "elegant"},
+    {"family": "Lora", "dir": "lora", "role": "elegant"},
+    {"family": "Dancing Script", "dir": "dancingscript", "role": "handwritten"},
+    {"family": "Pacifico", "dir": "pacifico", "role": "handwritten"}
+  ],
+  "pairs": [
+    {"id": "bold-modern", "label": {"vi": "Đậm hiện đại", "en": "Bold modern"}, "title": "Montserrat", "caption": "Montserrat"},
+    {"id": "vietnamese-clean", "label": {"vi": "Gọn, dấu đẹp", "en": "Clean Vietnamese"}, "title": "Be Vietnam Pro", "caption": "Inter"},
+    {"id": "fun", "label": {"vi": "Vui, tròn", "en": "Fun"}, "title": "Baloo 2", "caption": "Nunito"},
+    {"id": "elegant", "label": {"vi": "Sang", "en": "Elegant"}, "title": "Playfair Display", "caption": "Lora"}
+  ]
+}

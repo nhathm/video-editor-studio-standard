@@ -1,0 +1,16 @@
+[project]
+name = "nve"
+version = "0.5.0"
+description = "nve-studio: storyboard-driven video editing engine behind the /nve Claude skill"
+requires-python = ">=3.10"
+dependencies = ["numpy", "pillow"]
+
+[project.optional-dependencies]
+grade = ["opencv-python-headless"]
+dev = ["pytest", "jsonschema", "pyyaml"]
+
+[project.scripts]
+nve = "nve.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

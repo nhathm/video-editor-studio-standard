@@ -1,0 +1,11 @@
+{
+  "name": "nve-studio",
+  "owner": {"name": "nhathm"},
+  "plugins": [
+    {
+      "name": "nve",
+      "source": {"source": "github", "repo": "nhathm/video-editor-studio-standard", "ref": "stable"},
+      "description": "Storyboard-driven video editing with /nve. Installs the stable branch."
+    }
+  ]
+}

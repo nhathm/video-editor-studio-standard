@@ -1,0 +1,12 @@
+{
+  "_doc": "Bundled background music (Standard). Kevin MacLeod, incompetech.com, CC BY 4.0: the credit line MUST appear in the post description (nve writes it to renders/<name>.credits.txt). Trimmed to 90 s and normalised to -14 LUFS; nve loops/fades to the video length.",
+  "credit_template": "Music: \"{title}\" Kevin MacLeod (incompetech.com), Licensed under Creative Commons: By Attribution 4.0 License, http://creativecommons.org/licenses/by/4.0/",
+  "tracks": {
+    "carefree":        {"title": "Carefree",        "mood": ["vui tươi", "nhẹ nhàng", "ukulele", "đời thường"], "tempo": "medium"},
+    "life-of-riley":   {"title": "Life of Riley",   "mood": ["vui", "tươi sáng", "năng động", "quảng cáo"], "tempo": "medium-fast"},
+    "fluffing-a-duck": {"title": "Fluffing a Duck", "mood": ["hài hước", "nghịch ngợm", "vui nhộn"], "tempo": "medium"},
+    "sneaky-snitch":   {"title": "Sneaky Snitch",   "mood": ["tinh nghịch", "rón rén", "hài"], "tempo": "medium"},
+    "inspired":        {"title": "Inspired",        "mood": ["truyền cảm hứng", "êm", "chuyên nghiệp", "sức khoẻ"], "tempo": "slow"},
+    "wallpaper":       {"title": "Wallpaper",       "mood": ["hiện đại", "chill", "điện tử", "sản phẩm"], "tempo": "medium"}
+  }
+}

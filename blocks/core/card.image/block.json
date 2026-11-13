@@ -1,0 +1,18 @@
+{
+  "id": "core:card.image",
+  "version": "1",
+  "kind": "overlay",
+  "label": {"vi": "Thẻ ảnh sản phẩm", "en": "Image card"},
+  "description": "White rounded card with an image and a label tab, pops in when the product/thing is named. Show only while it is being spoken.",
+  "engines": ["hyperframes", "ass"],
+  "props": {
+    "img": {"type": "string", "required": true, "doc": "project-relative path or lib:img/<name>"},
+    "label": {"type": "string", "default": ""},
+    "top": {"type": "number", "default": 0.057}
+  },
+  "min_duration": 0.8,
+  "default_sfx": [
+    {"asset": "lib:sfx/pop", "at": 0.02, "volume": 0.5},
+    {"asset": "lib:sfx/sparkle", "at": 0.15, "volume": 0.3}
+  ]
+}

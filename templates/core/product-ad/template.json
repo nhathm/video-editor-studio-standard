@@ -1,0 +1,20 @@
+{
+  "id": "core:product-ad",
+  "version": "1",
+  "label": {"vi": "Quảng cáo sản phẩm", "en": "Product ad"},
+  "description": "Product footage without (much) talking: pouring, holding, close-ups, packaging. Cut by picture on the strongest moments, punchy text stamps, bgm-driven.",
+  "cut_strategy": "visual",
+  "cut": {"shot_min": 1.2, "shot_max": 3.0},
+  "defaults": {
+    "output": {"aspect": "9:16", "width": 1080, "height": 1920, "fps": 30, "speed": 1.0, "platform": "tiktok"},
+    "style": {
+      "look": "trong-tro",
+      "skin": false,
+      "font": {"title": "Montserrat", "caption": "Montserrat"},
+      "palette": {"ink": "#1F2A44", "accent": "#FFD84D", "text": "#FFFFFF", "spoken": "#9EE6FF"},
+      "caption": {"block": "core:caption.karaoke-pill", "group_min": 3, "group_max": 5, "top": 0.77, "keywords": []}
+    },
+    "audio": []
+  },
+  "suggest": {"length": "15-30 s", "bgm_volume": 0.6}
+}

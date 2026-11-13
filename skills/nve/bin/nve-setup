@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# One-time setup on the user's machine (macOS, Linux, Windows Git Bash): a private Python venv in
+# ~/.nve/venv with nve's packages. Never writes into the nve install folder. Prints what is still
+# missing (ffmpeg, Node) with the command to install it; it does not run admin commands itself.
+set -e
+VENV="$HOME/.nve/venv"
+PYBIN="$(command -v python3.12 || command -v python3.11 || command -v python3 || command -v python || true)"
+if [ -z "$PYBIN" ]; then
+  echo "Python 3.10+ is missing. macOS: brew install python@3.12 | Ubuntu: sudo apt install python3 python3-venv | Windows: winget install Python.Python.3.12"
+  exit 1
+fi
+"$PYBIN" - <<'EOF' || { echo "Python 3.10+ is required ($PYBIN is older)."; exit 1; }
+import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)
+EOF
+if [ ! -d "$VENV" ]; then
+  mkdir -p "$HOME/.nve"
+  "$PYBIN" -m venv "$VENV"
+fi
+VPY="$VENV/bin/python"; [ -x "$VPY" ] || VPY="$VENV/Scripts/python.exe"
+"$VPY" -m pip install -q --upgrade pip >/dev/null 2>&1 || true
+"$VPY" -m pip install -q numpy pillow opencv-python-headless jsonschema
+echo "Python venv ready: $VENV"
+
+missing=0
+if ! command -v ffmpeg >/dev/null 2>&1; then
+  missing=1
+  echo "MISSING ffmpeg (required). macOS: brew install ffmpeg | Ubuntu: sudo apt install ffmpeg | Windows: winget install Gyan.FFmpeg"
+elif ! ffmpeg -hide_banner -filters 2>/dev/null | grep -q " subtitles "; then
+  echo "WARNING ffmpeg has no libass (subtitles filter): install a full build (Homebrew ffmpeg, apt ffmpeg or Gyan.FFmpeg full)."
+fi
+if ! command -v node >/dev/null 2>&1 || [ "$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)" -lt 22 ]; then
+  echo "OPTIONAL Node.js >= 22 (HyperFrames: animated emoji, nicer motion, whisper, AI green-screen matte)."
+  echo "         macOS: brew install node | Ubuntu: see nodesource / nvm | Windows: winget install OpenJS.NodeJS.LTS"
+fi
+[ $missing -eq 0 ] && echo "Done. Next: nve init <your workspace folder>, then open Claude Code there and use /nve."
