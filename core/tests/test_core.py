@@ -258,3 +258,17 @@ def test_probe_url_treats_proxy_403_as_blocked(monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", refused)
     assert probe_url("https://x") is False
 
+
+def test_workspace_remembered_by_init(tmp_path, monkeypatch):
+    from nve import paths
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("NVE_WORKSPACE", raising=False)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    assert paths.find_workspace(elsewhere) is None
+    ws = tmp_path / "nve-studio"
+    ws.mkdir()
+    (ws / "studio.json").write_text("{}")
+    paths.remember_workspace(ws)
+    assert paths.find_workspace(elsewhere) == ws.resolve()
+

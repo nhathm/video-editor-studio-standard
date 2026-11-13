@@ -15,6 +15,18 @@ from pathlib import Path
 INSTALL_ROOT = Path(__file__).resolve().parents[2]
 PRO_ROOT = INSTALL_ROOT / "pro"
 WORKSPACE_MARKERS = ("studio.json", "studio.yaml")
+DEFAULT_WORKSPACE = Path("~/nve-studio")
+
+
+def remembered_workspace_file() -> Path:
+    """~/.nve/workspace holds the path of the last `nve init`, so /nve works from any folder."""
+    return Path.home() / ".nve" / "workspace"
+
+
+def remember_workspace(ws: Path) -> None:
+    f = remembered_workspace_file()
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(str(ws) + "\n", encoding="utf-8")
 
 
 class NveError(Exception):
@@ -29,7 +41,12 @@ def find_workspace(start: Path | None = None) -> Path | None:
     for d in (p, *p.parents):
         if any((d / m).exists() for m in WORKSPACE_MARKERS):
             return d
-    return None
+    # Not inside a workspace: fall back to the one `nve init` remembered.
+    try:
+        r = Path(remembered_workspace_file().read_text(encoding="utf-8").strip()).expanduser()
+    except OSError:
+        return None
+    return r.resolve() if any((r / m).exists() for m in WORKSPACE_MARKERS) else None
 
 
 def require_workspace(start: Path | None = None) -> Path:

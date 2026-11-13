@@ -8,7 +8,8 @@ from pathlib import Path
 
 from nve import __version__, registry
 from nve.engines import Ctx, _registry, chain
-from nve.paths import INSTALL_ROOT, NveError, find_workspace, is_inside_install, project_dir, require_workspace
+from nve.paths import (INSTALL_ROOT, NveError, find_workspace, is_inside_install, project_dir, remember_workspace,
+                       require_workspace)
 from nve.util import dump_json
 
 
@@ -49,7 +50,9 @@ def cmd_init(a):
     (ws / "custom" / "README.md").write_text(
         "# custom/\n\nYour own templates, blocks, scripts, fonts and brand kits. nve updates never touch this folder.\n"
         "Code Claude writes for you lands in custom/scripts/<name>/ (reusable) or projects/<p>/work/scripts/ (one-off).\n")
-    out({"workspace": str(ws)})
+    remember_workspace(ws)
+    out({"workspace": str(ws), "remembered": True,
+         "next": f"Open this folder in Claude Code (desktop app: choose {ws} as the folder; terminal: cd it and run claude)."})
 
 
 def cmd_doctor(a):

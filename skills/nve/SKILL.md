@@ -49,7 +49,8 @@ every command prints JSON. **You decide; nve executes exactly what `storyboard.j
 | Stage | Do | Command |
 |---|---|---|
 | S0 Doctor | Once per session (cloud: every thread). Tell the user only what is missing and what it costs them. On cloud, if a `network` host is BLOCKED, give the user the allowlist steps (`nve connect network`, `references/cloud.md`). | `nve doctor` |
-| Workspace | First time only: `nve init <folder>` (outside the install folder). | |
+| First run (local) | If `~/.nve/venv` is missing or `nve where` shows no workspace: run `bash <this skill's base directory>/bin/nve-setup` **from the folder Claude Code is open in**. It installs nve's Python packages and makes that folder the workspace (home folder → `~/nve-studio`). Tell the user in one line what is still missing (e.g. ffmpeg + the command), nothing else. | `nve-setup` |
+| Workspace | Found from the current folder, else the one remembered by the last `nve init`. To use another folder: `nve init <folder>`. | `nve where` |
 | New project | One project per video. Copy the user's files in. | `nve new <files…> --name "<name>"` |
 | S1 Ingest | Probe, transcribe (Scribe → whisper fallback), measure speech ratio, detect green screen. Read every `hint_*` / `next` field it returns. | `nve ingest <p> --language vi` |
 | S1b Transcript review | **Required when `needs_review` is true** (whisper, i.e. no ElevenLabs key). Read the numbered words, write spelling fixes from context to the corrections file, check. Never change timings. Tell the user it is a lower-precision transcript. | `nve transcript show <p>` → write `analysis/transcripts/<src>.corrections.json` → `nve transcript check <p>` (see `references/transcript-review.md`) |

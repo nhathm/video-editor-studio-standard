@@ -72,5 +72,5 @@ def build(edition: str) -> Path:
 
 
 if __name__ == "__main__":
-    for e in sys.argv[1:] or ["cloud-pro", "cloud-standard"]:
+    for e in sys.argv[1:] or sorted(f.stem for f in (ROOT / "editions").glob("cloud-*.json")):
         build(e)

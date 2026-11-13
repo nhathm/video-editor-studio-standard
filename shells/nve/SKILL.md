@@ -24,9 +24,9 @@ Hướng dẫn đầy đủ của skill này **không nằm ở đây** mà ở 
 
 Shell skill này **không chạy** ở đây. Trên máy, nve được cài thành **plugin Claude Code** từ git và chạy local:
 - Nếu đã có skill `nve` từ plugin (`nve:nve`) hoặc từ `.claude/skills/nve` của workspace → dùng skill đó, dừng shell skill.
-- Nếu chưa có → hướng dẫn người dùng tự gõ trong Claude Code:
-  `/plugin marketplace add nhathm/video-editor-studio-standard` rồi `/plugin install nve@nve-studio`, sau đó chạy
-  `bash <plugin>/skills/nve/bin/nve-setup` (tạo Python venv ở `~/.nve/venv`), mở session mới. Dừng ở đó.
+- Nếu chưa có → hướng dẫn người dùng (ngắn gọn): mở Claude Code trong thư mục muốn chứa video, gõ
+  `/plugin marketplace add nhathm/video-editor-studio-standard` rồi `/plugin install nve@nve-studio`, mở phiên mới
+  trong cùng thư mục và gõ `/nve` (lần đầu skill tự chạy `nve-setup`). Dừng ở đó.
 
 ## Cách nói chuyện
 

@@ -32,4 +32,18 @@ if ! command -v node >/dev/null 2>&1 || [ "$(node -p 'process.versions.node.spli
   echo "OPTIONAL Node.js >= 22 (HyperFrames: animated emoji, nicer motion, whisper, AI green-screen matte)."
   echo "         macOS: brew install node | Ubuntu: see nodesource / nvm | Windows: winget install OpenJS.NodeJS.LTS"
 fi
-[ $missing -eq 0 ] && echo "Done. Next: nve init <your workspace folder>, then open Claude Code there and use /nve."
+# Workspace = the folder Claude Code was opened in (the user's empty "Video Editor" folder, say), so
+# videos, projects and keys live where they chose. Home folder or the nve install folder -> ~/nve-studio.
+NVE_ROOT="$(cd "$(dirname "$0")/../../.." && pwd -P)"
+HERE="$(pwd -P)"
+case "$HERE/" in
+  "$NVE_ROOT/"*) WS="$HOME/nve-studio" ;;
+  *) if [ "$HERE" = "$(cd "$HOME" && pwd -P)" ]; then WS="$HOME/nve-studio"; else WS="$HERE"; fi ;;
+esac
+d="$HERE"   # already inside a workspace (e.g. a project folder)? keep that one
+while [ "$d" != "/" ] && [ -n "$d" ]; do
+  if [ -f "$d/studio.json" ] || [ -f "$d/studio.yaml" ]; then WS="$d"; break; fi
+  d="$(dirname "$d")"
+done
+bash "$(dirname "$0")/nve" init "$WS" >/dev/null && echo "Workspace ready: $WS"
+[ $missing -eq 0 ] && echo "Done. Next time open this folder in Claude Code and type /nve."

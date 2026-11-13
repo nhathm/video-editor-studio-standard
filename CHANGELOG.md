@@ -2,6 +2,10 @@
 
 Versions go up by 0.1 per release (0.3 → 0.4 → 0.5…) unless a number is chosen. (0.2 was skipped.) `stable` always points at the latest release tag.
 
+## 0.6.0 — 2026-11-13
+- Claude Code: the folder Claude Code is opened in becomes the workspace. Install = open Claude Code in an empty folder, `/plugin marketplace add` + `/plugin install`, new session, `/nve`: the skill runs `nve-setup` on first use (home folder → `~/nve-studio`; inside an existing workspace → that one).
+- `nve init` remembers the workspace (`~/.nve/workspace`), so `/nve` still finds it from another folder.
+
 ## 0.5.0 — 2026-11-13
 - Retry once: nve retries a failed install/download/network step exactly once (`pip install faster-whisper`, whisper model download, `npx` whisper, Scribe network/5xx errors), then reports the error. Same rule in the skill for commands Claude runs (hard rule 13) and in the shell skill for clone/fetch.
 - Network allowlist on claude.ai: `nve doctor` on cloud checks `api.elevenlabs.io` and `huggingface.co` and marks blocked hosts; `nve connect network` and `INSTALL.md` explain adding `api.elevenlabs.io`, `huggingface.co`, `*.huggingface.co`, `*.hf.co` in Settings → Capabilities on the web or desktop app (account-wide, so iPhone chats use it too).
