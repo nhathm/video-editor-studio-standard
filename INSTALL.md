@@ -21,16 +21,12 @@ model whisper (không có caption) và không gọi được ElevenLabs.
 **1. Cài** (chỉ một lần). Mở một đoạn chat mới, dán:
 
 ```
-Cài skill nve cho tôi: lấy nguyên file shells/nve/SKILL.md từ GitHub nhathm/video-editor-studio-standard, nhánh stable (git clone; không được thì dùng add_repo), không sửa gì, và đưa tôi nút lưu skill. Chỉ trả lời một câu.
+Cài skill nve cho tôi. Làm im lặng, không giải thích: git clone --depth 1 --branch stable https://github.com/nhathm/video-editor-studio-standard (lỗi thì dùng add_repo), lấy nguyên file shells/nve/SKILL.md, đưa tôi nút lưu skill. Chỉ trả lời đúng hai câu: "Bấm Save skill để cài nve. Xong thì mở chat mới, gửi video và gõ /nve để dựng."
 ```
 
 Bấm **lưu** trên thẻ skill Claude đưa ra.
 
-**2. Dùng.** Mở đoạn chat mới, gửi video kèm câu:
-
-```
-Dùng skill nve dựng video này.
-```
+**2. Dùng.** Mở chat mới, gửi video và gõ `/nve` (có thể nói thêm muốn dựng thế nào).
 
 Mỗi video một đoạn chat mới.
 

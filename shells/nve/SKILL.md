@@ -5,43 +5,48 @@ description: Edit videos end to end with nve-studio. The user drops in raw video
 
 # nve (shell skill)
 
-Hướng dẫn đầy đủ của skill này **không nằm ở đây** mà ở GitHub `nhathm/video-editor-studio-standard`, nhánh
-`stable`, file `skills/nve/SKILL.md`. Shell skill này chỉ nạp bản đó, để cập nhật nve chỉ cần đẩy lên nhánh
-`stable`, không phải cài lại skill.
+The full instructions for this skill are **not here**. They live on GitHub in `nhathm/video-editor-studio-standard`,
+branch `stable`, file `skills/nve/SKILL.md`. This shell skill only loads that file, so updating nve only
+needs a push to `stable`, never a reinstall of the skill.
 
-Đầu tiên xác định đang chạy ở đâu. Chỉ trường hợp A (claude.ai) mới tải và chạy nve trên cloud.
+First work out where you are running. Only case A (claude.ai) downloads and runs nve in the cloud.
 
-## A. claude.ai (web hoặc app điện thoại, gói Free hoặc trả phí): có `/mnt/user-data` hoặc `/home/claude`
+## A. claude.ai (web or phone app, Free or paid plan): `/mnt/user-data` or `/home/claude` exists
 
-1. **Lấy repo** (bản mới nhất), `REPO=/tmp/video-editor-studio-standard`:
-   - chưa có `$REPO`: `GIT_TERMINAL_PROMPT=0 git clone -q --depth 1 --branch stable https://github.com/nhathm/video-editor-studio-standard.git $REPO`.
-     Lỗi thì chạy lại đúng 1 lần. Vẫn lỗi **và** có công cụ `add_repo` → gọi `add_repo` cho
-     `nhathm/video-editor-studio-standard` (access read) rồi clone theo hướng dẫn của tool vào `$REPO`
-     (`--depth 1 --branch stable`). Không có `add_repo` → báo người dùng một dòng kèm lỗi, dừng.
-   - đã có: `git -C $REPO fetch -q --depth 1 origin stable && git -C $REPO reset -q --hard origin/stable`
-     (lỗi thì dùng bản đang có).
-2. Workspace: `export NVE_WORKSPACE=/tmp/nve-ws`, chạy `nve init /tmp/nve-ws`.
-3. Đọc thêm `$REPO/skills/nve/references/cloud.md`.
+1. **Get the repo** (latest version), `REPO=/tmp/video-editor-studio-standard`:
+   - `$REPO` missing: `GIT_TERMINAL_PROMPT=0 git clone -q --depth 1 --branch stable https://github.com/nhathm/video-editor-studio-standard.git $REPO`.
+     On failure run it again exactly once. Still failing **and** the `add_repo` tool exists → call `add_repo`
+     for `nhathm/video-editor-studio-standard` (read access), then clone into `$REPO` as the tool instructs
+     (`--depth 1 --branch stable`). No `add_repo` → tell the user in one line with the error, and stop.
+   - `$REPO` present: `git -C $REPO fetch -q --depth 1 origin stable && git -C $REPO reset -q --hard origin/stable`
+     (on failure keep using the copy you have).
+2. Workspace: `export NVE_WORKSPACE=/tmp/nve-ws`, then run `nve init /tmp/nve-ws`.
+3. Also read `$REPO/skills/nve/references/cloud.md`.
 
-## B. Claude Code (CLI, tab Code trong app desktop, IDE) trên Mac / Windows / Linux
+## B. Claude Code (CLI, Code tab in the desktop app, IDE) on Mac / Windows / Linux
 
-Shell skill này **không chạy** ở đây. Trên máy, nve được cài thành **plugin Claude Code** từ git và chạy local:
-- Nếu đã có skill `nve` từ plugin (`nve:nve`) hoặc từ `.claude/skills/nve` của workspace → dùng skill đó, dừng shell skill.
-- Nếu chưa có → hướng dẫn người dùng (ngắn gọn): mở Claude Code trong thư mục muốn chứa video, gõ
-  `/plugin marketplace add nhathm/video-editor-studio-standard` rồi `/plugin install nve@nve-studio`, mở phiên mới
-  trong cùng thư mục và gõ `/nve` (lần đầu skill tự chạy `nve-setup`). Dừng ở đó.
+This shell skill does **not run** here. On a computer nve is installed as a **Claude Code plugin** from git
+and runs locally:
+- If a `nve` skill already exists from the plugin (`nve:nve`) or from the workspace's `.claude/skills/nve` →
+  use that skill and stop this shell skill.
+- Otherwise → tell the user (briefly): open Claude Code in the folder that should hold the videos, type
+  `/plugin marketplace add nhathm/video-editor-studio-standard` then `/plugin install nve@nve-studio`, open a new
+  session in the same folder and type `/nve` (the first run sets itself up with `nve-setup`). Stop there.
 
-## Cách nói chuyện
+## How to talk
 
-Người dùng không rành kỹ thuật. Trả lời ngắn (1–3 câu), nói về video của họ. Không nhắc commit, nhánh, repo,
-đường dẫn, shell skill, tên engine hay cách nve chạy bên trong, trừ khi họ hỏi. Việc lấy repo làm im lặng.
+The user is not technical. Reply briefly (1–3 sentences) about their video, in the user's language. Never
+mention commits, branches, repos, paths, the shell skill, engine names or how nve works inside unless they
+ask. Getting the repo happens silently.
 
-## Khi chạy (trường hợp A)
+## When running (case A)
 
-- Gọi CLI luôn bằng `bash $REPO/skills/nve/bin/nve <lệnh>` (gọi tắt là `nve`).
-- Đọc toàn bộ `$REPO/skills/nve/SKILL.md` và làm theo **chính xác**. Nội dung đó thay thế shell skill này; yêu cầu
-  và file người dùng gửi áp dụng nguyên cho nó.
-- Không bao giờ ghi file vào `$REPO` (code viết thêm cho người dùng để trong workspace `custom/`).
-- Không lấy được repo (xem bước 1) → báo người dùng một dòng kèm lỗi, dừng. Không tự dựng video theo trí nhớ.
+- Always call the CLI as `bash $REPO/skills/nve/bin/nve <command>` (called `nve` below).
+- Read all of `$REPO/skills/nve/SKILL.md` and follow it **exactly**. It replaces this shell skill; the user's
+  request and files apply to it unchanged.
+- Never write files into `$REPO` (extra code written for the user goes in the workspace `custom/`).
+- Repo unavailable (see step 1) → tell the user in one line with the error, and stop. Never edit the video
+  from memory.
 
-Chỉ cần cập nhật shell skill khi đổi `description` hoặc cách lấy repo. Shell skill lưu ở `shells/nve/SKILL.md` trong repo.
+This shell skill only needs updating when the `description` or the way the repo is fetched changes. It is
+stored at `shells/nve/SKILL.md` in the repo.

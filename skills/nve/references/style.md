@@ -1,19 +1,21 @@
 # Style questions (S3, ask once, before the preview)
 
-Ask in ONE message, numbered, each with the default first. If the user answers "mặc định" / "như cũ" /
-"default", use the template defaults and skip the rest.
+Ask in ONE message, in the user's language, numbered, each with the default first. If the user answers
+"default" / "mặc định" / "như cũ", use the template defaults and skip the rest.
 
-1. **Khung hình / nền tảng**: 9:16 TikTok/Reels (mặc định) · 1:1 · 16:9 YouTube.
-2. **Font** (pairs from `packs/fonts/fonts.json`): Đậm hiện đại (Montserrat, mặc định) · Gọn, dấu đẹp
-   (Be Vietnam Pro + Inter) · Vui, tròn (Baloo 2 + Nunito) · Sang (Playfair Display + Lora).
-3. **Màu / filter**: Trong trẻo (mặc định) · Giữ màu gốc.
-4. **Cà da (làm mịn da)**: Có (mặc định cho talking head) · Không.
-5. **Phụ đề**: karaoke nền tối, từ khoá vàng (mặc định) · không phụ đề.
-6. **Tốc độ**: 1.15× (gợi ý, giữ giọng) · 1.0×.
-7. **Nhạc nền**: gợi ý 2–3 bài hợp mood từ `nve assets list bgm` (kèm tên bài + mood) · không nhạc.
-   Có HeyGen thì tìm thêm: `nve assets fetch-bgm --intent "..."`.
-8. **Tiếng gốc** của các clip không có lời: giữ · tắt (để nhạc nền thay) — chỉ hỏi khi có clip như vậy.
-9. **Ảnh bìa**: mình đề xuất khung hình + chữ hook (2–6 từ); có gắn ảnh bìa vào đầu video (1 giây) không?
+1. **Frame / platform**: 9:16 TikTok/Reels (default) · 1:1 · 16:9 YouTube.
+2. **Font** (pairs from `packs/fonts/fonts.json`): Bold modern (Montserrat, default) · Clean, good diacritics
+   (Be Vietnam Pro + Inter) · Fun, rounded (Baloo 2 + Nunito) · Elegant (Playfair Display + Lora).
+3. **Colour / filter**: "Trong trẻo" / clean & bright (default) · Original colours.
+4. **Skin retouch** (smoothing): Yes (default for talking head) · No.
+5. **Captions**: karaoke on a dark pill, keywords yellow (default) · no captions.
+6. **Speed**: 1.15× (suggested, keeps the voice) · 1.0×.
+7. **Background music**: suggest 2–3 tracks that fit the mood from `nve assets list bgm` (with title + mood) ·
+   no music. With HeyGen, search more: `nve assets fetch-bgm --intent "..."`.
+8. **Original sound** of clips without speech: keep · mute (let the music replace it). Ask only when such
+   clips exist.
+9. **Cover image**: propose a frame + hook text (2–6 words); also put the cover at the start of the video
+   (1 second)?
 10. Brand colours? (default ink #1F2A44, accent #FFD84D).
 
 Map answers to `output` and `style` in the storyboard. Font pairs set `style.font.title` and

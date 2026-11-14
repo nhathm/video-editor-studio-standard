@@ -18,7 +18,7 @@ nve works with **no account at all** (level L0). Keys only add features. `nve do
 
 ## Cloud (claude.ai) only: a key pasted in chat
 
-Prefer a claude.ai connector if one exists. Otherwise, if the user wants to paste a key, first say once:
+Prefer a claude.ai connector if one exists. Otherwise, if the user wants to paste a key, first say once (in the user's language):
 
 > Key bạn dán sẽ nằm trong lịch sử cuộc trò chuyện này; ai xem được thread (hoặc nếu bạn chia sẻ nó) đều
 > thấy key. Nên tạo một key riêng cho nve, đặt hạn mức credit thấp, và xoá/tạo lại key khi xong. Bạn

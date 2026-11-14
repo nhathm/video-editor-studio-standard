@@ -2,6 +2,11 @@
 
 Versions go up by 0.1 per release (0.3 → 0.4 → 0.5…) unless a number is chosen. (0.2 was skipped.) `stable` always points at the latest release tag.
 
+## 0.8.0 — 2026-11-14
+- Shell skill (`shells/nve/SKILL.md`) is now written in English like every other skill file; behaviour unchanged (git clone first, `add_repo` as fallback, short non-technical replies in the user's language).
+- Style questions (`references/style.md`) are written in English and asked in the user's language; the key warning in `references/connections.md` is said in the user's language.
+- `INSTALL.md`: install prompt is silent, clones with git, and replies with one fixed sentence telling the user to send a video and type `/nve`.
+
 ## 0.7.1 — 2026-11-14
 - Install prompt (claude.ai): fetch the shell skill with `git clone` first, `add_repo` only as a fallback.
 
