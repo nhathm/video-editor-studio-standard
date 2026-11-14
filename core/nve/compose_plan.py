@@ -52,7 +52,7 @@ def build(sb: dict, words: list[dict], cut_path: Path, duration: float, project_
     pal = {"ink": "#1F2A44", "accent": "#FFD84D", "text": "#FFFFFF", "spoken": "#9EE6FF", **st.get("palette", {})}
     font = {"title": "Montserrat", "caption": "Montserrat", **st.get("font", {})}
     plan: dict = {"W": W, "H": H, "fps": o["fps"], "duration": round(duration, 3), "video": str(cut_path),
-                  "palette": pal, "font": font, "captions": None, "stamps": [], "cards": [], "sfx": [], "bgm": None, "person": None, "background": None,
+                  "palette": pal, "font": font, "captions": None, "stamps": [], "cards": [], "walls": [], "sfx": [], "bgm": None, "person": None, "background": None,
                   "warnings": []}
 
     if person:
@@ -75,10 +75,13 @@ def build(sb: dict, words: list[dict], cut_path: Path, duration: float, project_
                             "groups": caption_groups(words, p["group_min"], p["group_max"], duration, kw)}
 
     sfx_n = 0
+    banned = set(st.get("ban_sfx") or [])  # the user's taste: never these sounds
 
     def add_sfx(ref: str, at: float, vol: float, mx: float | None = None) -> None:
         nonlocal sfx_n
         if at >= duration:
+            return
+        if ref.rsplit("/", 1)[-1].rsplit(".", 1)[0] in banned:
             return
         try:
             path = assets.resolve(ref, project_dir, ws, tier)
@@ -108,6 +111,13 @@ def build(sb: dict, words: list[dict], cut_path: Path, duration: float, project_
         elif blk["id"].endswith("card.image"):
             item["img"] = str(assets.resolve(p["img"], project_dir, ws, tier))
             plan["cards"].append(item)
+        elif blk["id"].endswith("media.wall"):
+            item["img"] = str(assets.resolve(p["img"], project_dir, ws, tier))
+            fx, fy = (list(p.get("focus") or [0.5, 0.5]) + [0.5, 0.5])[:2]
+            z0, z1 = (list(p.get("zoom") or [1.0, 1.35]) + [1.0, 1.35])[:2]
+            item.update({"focus": [min(1.0, max(0.0, float(fx))), min(1.0, max(0.0, float(fy)))],
+                         "zoom": [max(1.0, float(z0)), max(1.0, float(z1))]})
+            plan["walls"].append(item)
         else:
             plan["warnings"].append(f"block {blk['id']} has no renderer yet; skipped")
             continue
@@ -119,6 +129,13 @@ def build(sb: dict, words: list[dict], cut_path: Path, duration: float, project_
             if isinstance(x, list):
                 x = {"asset": f"lib:sfx/{x[0]}", "at": x[1], "volume": x[2] if len(x) > 2 else 0.4}
             add_sfx(x["asset"], s + x.get("at", 0), x.get("volume", 0.4), x.get("max"))
+
+    # walls that follow each other (gap < 0.15 s) are joined with a hard cut: no fade, no flash of the video between
+    walls = sorted(plan["walls"], key=lambda w: w["start"])
+    for a, b in zip(walls, walls[1:]):
+        if 0 <= b["start"] - a["end"] < 0.15:
+            a["end"] = b["start"]
+            a["cut_out"] = b["cut_in"] = True
 
     for a in sb["tracks"].get("audio", []):
         if a["kind"] == "bgm":

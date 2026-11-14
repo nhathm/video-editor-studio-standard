@@ -1,12 +1,13 @@
 [project]
 name = "nve"
-version = "0.8.0"
+version = "0.9.0"
 description = "nve-studio: storyboard-driven video editing engine behind the /nve Claude skill"
 requires-python = ">=3.10"
 dependencies = ["numpy", "pillow"]
 
 [project.optional-dependencies]
 grade = ["opencv-python-headless"]
+ref = ["yt-dlp"]
 dev = ["pytest", "jsonschema", "pyyaml"]
 
 [project.scripts]

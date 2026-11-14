@@ -1,0 +1,8 @@
+Parts of this folder are adapted from rea-video
+https://github.com/JuneYaooo/rea-video
+Copyright 2026 JuneYaooo
+Licensed under the Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0).
+
+Adapted files say so in their first lines and list what was kept and what was changed:
+- shots.py   (from rea_video/shots.py)
+- beat.py    (from rea_video/audio.py)

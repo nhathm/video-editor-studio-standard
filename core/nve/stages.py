@@ -9,7 +9,7 @@ import re
 import shutil
 from pathlib import Path
 
-from nve import compose_plan, registry, storyboard as SB, timeline
+from nve import compose_plan, registry, storyboard as SB, taste, timeline
 from nve.engines import Ctx, run_capability
 from nve.paths import NveError
 from nve.project import Project
@@ -213,6 +213,21 @@ def _edge_score(img) -> float:
     return round(ImageStat.Stat(g.filter(ImageFilter.FIND_EDGES)).var[0], 1)
 
 
+def _cut_points(path: Path, src: dict, threshold: float) -> tuple[list[float], list[str]]:
+    """Shot boundaries of one video: nve.analyze.shots (jump cuts, flashes, fades), else ffmpeg's scene score."""
+    from nve.analyze import shots as AS
+    try:
+        sh = AS.shots_of(str(path), src.get("fps") or 30.0)
+        if sh:
+            return [x["start"] for x in sh] + [src["duration"]], [x["transition_in"] for x in sh]
+    except Exception as e:  # noqa: BLE001 - any decode problem: fall back to ffmpeg
+        log(f"shot detector failed on {path.name} ({e}); using ffmpeg scene detection")
+    r = run(["ffmpeg", "-hide_banner", "-i", str(path), "-vf", f"select='gt(scene,{threshold})',showinfo",
+             "-an", "-f", "null", "-"], check=False)
+    cuts = [float(m) for m in re.findall(r"pts_time:([\d.]+)", r.stderr or "")]
+    return [0.0] + [c for c in cuts if 0.3 < c < src["duration"] - 0.3] + [src["duration"]], []
+
+
 def analyze_shots(prj: Project, threshold: float = 0.3) -> dict:
     """Split every video source into shots and score them, then build a contact sheet Claude can
     look at to choose moments (visual cut strategy)."""
@@ -227,13 +242,11 @@ def analyze_shots(prj: Project, threshold: float = 0.3) -> dict:
             continue
         if s["kind"] != "video":
             continue
-        r = run(["ffmpeg", "-hide_banner", "-i", str(prj.p(s["rel"])), "-vf", f"select='gt(scene,{threshold})',showinfo",
-                 "-an", "-f", "null", "-"], check=False)
-        cuts = [float(m) for m in re.findall(r"pts_time:([\d.]+)", r.stderr or "")]
-        bounds = [0.0] + [c for c in cuts if 0.3 < c < s["duration"] - 0.3] + [s["duration"]]
+        bounds, kinds = _cut_points(prj.p(s["rel"]), s, threshold)
         for k, (a, b) in enumerate(zip(bounds, bounds[1:])):
             if b - a >= 0.4:
-                shots.append({"id": f"{s['id']}{k + 1}", "src": s["id"], "in": round(a, 2), "out": round(b, 2)})
+                shots.append({"id": f"{s['id']}{k + 1}", "src": s["id"], "in": round(a, 2), "out": round(b, 2),
+                              **({"cut_in": kinds[k]} if kinds and kinds[k] != "start" else {})})
     thumbs = []
     for sh in shots:
         src = next(x for x in ing["sources"] if x["id"] == sh["src"])
@@ -351,12 +364,18 @@ def plan_draft(prj: Project, ctx: Ctx, template_id: str | None = None, strategy:
           "cut_strategy": strategy, "brief": "", "output": o, "style": style, "sources": sources,
           "tracks": {"video": video, "overlay": [], "audio": list(d.get("audio", []))},
           "text_fixes": dict(tpl.get("text_fixes", {})), "engines": {}, "gates": {"plan": None, "preview": None, "final": None}}
+    applied = []
+    if ctx.workspace:
+        applied = taste.apply_defaults(sb, taste.rules_for(taste.load(ctx.workspace), template_id, tpl.get("_chain")))
+        if applied:
+            ctx.notes.append("taste applied: " + "; ".join(applied))
     errs = SB.validate(sb)
     if errs:
         raise NveError("Draft storyboard is invalid:\n" + "\n".join(errs))
     dump_json(prj.storyboard_path, sb)
     refresh(prj, ctx)
-    prj.log("plan draft", [f"template {template_id}, cut strategy {strategy}, {len(video)} ranges"])
+    prj.log("plan draft", [f"template {template_id}, cut strategy {strategy}, {len(video)} ranges"]
+            + ([f"taste: {'; '.join(applied)}"] if applied else []))
     return sb
 
 
@@ -370,8 +389,19 @@ def refresh(prj: Project, ctx: Ctx) -> dict:
     dump_json(prj.p("analysis", "words_out.json"), words)
     prj.p("storyboard.md").write_text(SB.to_markdown(prj.path, sb, LABELS_VI), encoding="utf-8")
     o = sb["output"]
-    return {"duration": timeline.total_duration(sb["tracks"]["video"], o.get("speed", 1.0), o["fps"]),
-            "words": len(words), "overlays": len(sb["tracks"].get("overlay", []))}
+    dur = timeline.total_duration(sb["tracks"]["video"], o.get("speed", 1.0), o["fps"])
+    return {"duration": dur, "words": len(words), "overlays": len(sb["tracks"].get("overlay", [])),
+            "taste_warnings": taste_warnings(sb, dur, ctx)}
+
+
+def taste_warnings(sb: dict, duration: float, ctx: Ctx) -> list[str]:
+    if not ctx.workspace:
+        return []
+    try:
+        chain = registry.resolve(sb["template"], "template", ctx.workspace, ctx.env.get("edition")).get("_chain")
+    except NveError:
+        chain = None
+    return taste.check(sb, duration, ctx.workspace, chain)
 
 
 # ───────────────────────── S5-S8 cut + compose ─────────────────────────
@@ -450,7 +480,8 @@ def preview(prj: Project, ctx: Ctx, times: list[float] | None = None) -> dict:
             stills, labels = [cj] + stills, ["cover"] + labels
     sheet = make_sheet(stills, labels, prj.p("preview", "sheet.jpg"))
     prj.log("preview", [f"engine {res['engine']}, {len(times)} stills at {', '.join(f'{t:.1f}s' for t in times)}"] + ctx.notes)
-    return {"sheet": str(sheet), "stills": res["stills"], "times": times, "engine": res["engine"], "warnings": plan["warnings"]}
+    return {"sheet": str(sheet), "stills": res["stills"], "times": times, "engine": res["engine"], "warnings": plan["warnings"],
+            "taste_warnings": taste_warnings(sb, plan["duration"], ctx)}
 
 
 def make_sheet(stills: list[Path], times: list[float], out: Path) -> Path:
@@ -480,7 +511,7 @@ def _cover_plan(plan: dict, cover: dict, ws: Path | None) -> dict:
     from nve import assets
     p = copy.deepcopy(plan)
     t = float(cover.get("at", 0.5))
-    p.update({"captions": None, "cards": [], "sfx": [], "bgm": None, "warnings": []})
+    p.update({"captions": None, "cards": [], "walls": [], "sfx": [], "bgm": None, "warnings": []})
     emoji = []
     for cp in ([cover["emoji"]] if isinstance(cover.get("emoji"), str) else cover.get("emoji", [])):
         try:

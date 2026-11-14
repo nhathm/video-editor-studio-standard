@@ -151,6 +151,8 @@ def doctor(ws: Path | None, refresh: bool = False, deep: bool = False) -> dict:
         "libass": None,
         "whisper": shutil.which("whisper-cli") or shutil.which("whisper-cpp"),
     }
+    from nve import pro
+    tools["yt-dlp"] = pro.load("download").ytdlp_version() if pro.available() else None
     if tools["ffmpeg"]:
         r = run(["ffmpeg", "-hide_banner", "-filters"], check=False)
         tools["libass"] = " subtitles " in (r.stdout or "")
@@ -207,6 +209,8 @@ def format_report(d: dict) -> str:
         f"  {ok(t['libass'])} libass subtitles filter (compose.ass fallback)",
         f"  {ok(d['node'])} node >=22 {d['node']['version'] if d['node'] else 'missing -> HyperFrames unavailable, using ffmpeg/ASS'}",
         f"  {ok(d['opencv'])} opencv (skin retouch; without it the look uses an ffmpeg approximation)",
+        *([f"  {ok(t.get('yt-dlp'))} yt-dlp {t.get('yt-dlp') or 'missing -> reference links cannot be downloaded (send the file instead)'}"]
+          if d["edition"].get("tier") == "pro" else []),
         f"  {ok(k['elevenlabs'])} ElevenLabs key {'set' if k['elevenlabs'] else 'not set -> whisper transcripts (run: nve connect elevenlabs)'}",
         f"  {ok(k['heygen'])} HeyGen login {'' if k['heygen'] is not None else '(not checked; nve doctor --deep)'}",
     ]

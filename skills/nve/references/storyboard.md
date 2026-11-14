@@ -55,6 +55,7 @@ OUTPUT time, after cuts, filler removal, speed and `text_fixes`).
 | `core:caption.karaoke-pill` | captions, 3–5 words on a dark pill, spoken words light up, keywords accent + pop | group_min, group_max, keywords, top (fraction of height), size (fraction of width) |
 | `core:stamp.slam` | big outlined text slammed in, Noto animated emoji above; SFX whoosh + impact (+ pop with emoji) added automatically | text (`\|` = new line), emoji [codepoints], alt, top |
 | `core:card.image` | white card with an image + label, pops in; SFX pop + sparkle automatic | img (project path or `lib:img/<name>`), label, top |
+| `core:media.wall` | a picture over the whole frame while the voice goes on (e.g. a wall of the creator's past videos), zooming towards `focus` (brought to the centre as far as the edges allow); optional colour tint and a badge in the middle (view count with an eye icon); stamps and captions stay on top; SFX whoosh automatic | img, focus [x, y], zoom [from, to], tint, tint_opacity, badge, badge_icon (eye / play / none), badge_color |
 
 ## Assets
 

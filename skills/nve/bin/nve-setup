@@ -19,6 +19,11 @@ fi
 VPY="$VENV/bin/python"; [ -x "$VPY" ] || VPY="$VENV/Scripts/python.exe"
 "$VPY" -m pip install -q --upgrade pip >/dev/null 2>&1 || true
 "$VPY" -m pip install -q numpy pillow opencv-python-headless jsonschema
+# Pro (reference style, `nve ref`): yt-dlp changes often to keep up with the sites, so always upgrade it
+NVE_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+if [ -d "$NVE_ROOT/pro/python" ]; then
+  "$VPY" -m pip install -q --upgrade yt-dlp || echo "WARNING yt-dlp could not be installed: reference links will need the file instead."
+fi
 echo "Python venv ready: $VENV"
 
 missing=0

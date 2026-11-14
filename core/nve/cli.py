@@ -90,6 +90,37 @@ def cmd_transcript(a):
         out(stages.transcript_check(prj, ctx))
 
 
+def cmd_ref(a):
+    from nve import pro
+    ref = pro.load("ref", "Reference style analysis (`nve ref`)")
+    ctx = _ctx()
+    prj = _prj(ctx, a.project)
+    if a.clean:
+        out(ref.clean(prj, a.id))
+        return
+    if a.check:
+        out(ref.check(prj))
+        return
+    if not a.source:
+        raise NveError("Usage: nve ref <project> <link|file>  (or --clean)")
+    out(ref.analyze(prj, a.source, a.id))
+
+
+def cmd_style(a):
+    from nve import pro
+    st = pro.load("styles", "Saved styles (`nve style`)")
+    ws = require_workspace()
+    if a.action == "list":
+        out(st.list_styles(ws))
+    elif a.action == "show":
+        out(st.load(ws, a.name or a.project or ""))
+    else:
+        if not a.project:
+            raise NveError(f"Usage: nve style {a.action} <project> [name]")
+        prj = _prj(_ctx(), a.project)
+        out(st.save(prj, ws, a.name) if a.action == "save" else st.apply(prj, ws, a.name or ""))
+
+
 def cmd_shots(a):
     from nve.stages import analyze_shots
     ctx = _ctx()
@@ -104,6 +135,8 @@ def cmd_plan(a):
     if a.action == "draft":
         stages.plan_draft(prj, ctx, a.template, a.strategy, a.overwrite)
     res = stages.refresh(prj, ctx)
+    if ctx.notes:
+        res["notes"] = list(ctx.notes)
     res.update({"storyboard": str(prj.storyboard_path), "markdown": str(prj.p("storyboard.md")),
                 "words_out": str(prj.p("analysis", "words_out.json"))})
     out(res)
@@ -211,8 +244,61 @@ def cmd_connect(a):
     out(guides[a.provider])
 
 
+def cmd_taste(a):
+    from nve import taste
+    ws = require_workspace()
+    if a.action == "list":
+        rules = taste.load(ws)["rules"]
+        out([dict(r, line=taste.describe(r)) for r in rules if a.all or r.get("active", True)])
+    elif a.action == "add":
+        if not a.text:
+            raise NveError('Usage: nve taste add "<what the user said>" [--set k=v] [--max metric=n] ...')
+        r = taste.add(ws, a.text, sets=a.set, maxes=a.max, mins=a.min, ban_sfx=a.ban_sfx, ban_bgm=a.ban_bgm,
+                      template=a.template, source=a.source, project=a.project)
+        out({"added": r, "line": taste.describe(r)})
+    elif a.action in ("forget", "restore"):
+        if not a.text:
+            raise NveError(f"Usage: nve taste {a.action} <id>")
+        r = taste.set_active(ws, a.text, a.action == "restore")
+        out({a.action: r["id"], "line": taste.describe(r)})
+    elif a.action == "prompt":
+        chain = None
+        if a.template:
+            try:
+                chain = registry.resolve(a.template, "template", ws).get("_chain")
+            except NveError:
+                pass
+        out(taste.prompt(ws, a.template, chain))
+    elif a.action == "metrics":
+        if not a.text:
+            raise NveError("Usage: nve taste metrics <project>")
+        from nve import timeline
+        ctx = _ctx()
+        sb = _prj(ctx, a.text).load_storyboard()
+        o = sb["output"]
+        out(taste.metrics(sb, timeline.total_duration(sb["tracks"]["video"], o.get("speed", 1.0), o["fps"]), ws))
+    elif a.action == "export":
+        out(taste.export(ws))
+    elif a.action == "import":
+        if not a.text:
+            raise NveError("Usage: nve taste import <file.json>")
+        out(taste.import_(ws, json.loads(Path(a.text).expanduser().read_text(encoding="utf-8"))))
+
+
 def cmd_where(a):
     out({"install_root": str(INSTALL_ROOT), "workspace": str(find_workspace() or ""), "version": __version__})
+
+
+def _pro_parsers(sp) -> None:
+    p = sp.add_parser("ref", help="learn the style of a sample video (link or file); --clean deletes it afterwards")
+    p.add_argument("project"); p.add_argument("source", nargs="?", help="Facebook / YouTube / TikTok link, or a video file")
+    p.add_argument("--id", help="reference id (default r1, r2, ...)"); p.add_argument("--clean", action="store_true")
+    p.add_argument("--check", action="store_true", help="validate analysis/style_dna.json"); p.set_defaults(fn=cmd_ref)
+    p = sp.add_parser("style", help="saved styles learned from sample videos (list / show / save / apply)")
+    p.add_argument("action", choices=["list", "show", "save", "apply"])
+    p.add_argument("project", nargs="?", help="save / apply: the project; show: the style name")
+    p.add_argument("name", nargs="?", help="style name (save: defaults to the name in style_dna.json)")
+    p.set_defaults(fn=cmd_style)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -225,12 +311,15 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--refresh", action="store_true"); p.add_argument("--deep", action="store_true"); p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_doctor)
     p = sp.add_parser("new", help="create a project from video/photo files")
-    p.add_argument("files", nargs="+"); p.add_argument("--name"); p.add_argument("--move", action="store_true"); p.set_defaults(fn=cmd_new)
+    p.add_argument("files", nargs="*"); p.add_argument("--name"); p.add_argument("--move", action="store_true"); p.set_defaults(fn=cmd_new)
     p = sp.add_parser("ingest", help="S1: probe sources, transcribe, measure signals")
     p.add_argument("project"); p.add_argument("--language"); p.add_argument("--no-transcribe", action="store_true"); p.set_defaults(fn=cmd_ingest)
     p = sp.add_parser("transcript", help="proof-read a transcript: show numbered words / check the corrections file")
     p.add_argument("action", choices=["show", "check"]); p.add_argument("project"); p.add_argument("--src")
     p.set_defaults(fn=cmd_transcript)
+    from nve import pro
+    if pro.available():  # editions without these features do not show the commands at all
+        _pro_parsers(sp)
     p = sp.add_parser("shots", help="split videos into shots, score them, write contact sheets")
     p.add_argument("project"); p.set_defaults(fn=cmd_shots)
     p = sp.add_parser("plan", help="S3: draft or refresh the storyboard")
@@ -258,6 +347,16 @@ def main(argv: list[str] | None = None) -> None:
     p = sp.add_parser("fonts", help="download the Vietnamese font pack"); p.add_argument("action", choices=["sync"])
     p.add_argument("--only"); p.set_defaults(fn=cmd_fonts)
     p = sp.add_parser("connect", help="how to connect a provider"); p.add_argument("provider"); p.set_defaults(fn=cmd_connect)
+    p = sp.add_parser("taste", help="the user's taste log: corrections kept as rules for the next videos")
+    p.add_argument("action", choices=["list", "add", "forget", "restore", "prompt", "metrics", "export", "import"])
+    p.add_argument("text", nargs="?", help="add: the user's words; forget/restore: rule id; metrics: project; import: file")
+    p.add_argument("--set", action="append", help="output.<key>=<value> or style.<key>=<value> (JSON value)")
+    p.add_argument("--max", action="append", help="<metric>=<number>"); p.add_argument("--min", action="append", help="<metric>=<number>")
+    p.add_argument("--ban-sfx", action="append"); p.add_argument("--ban-bgm", action="append")
+    p.add_argument("--template", help="only for this template"); p.add_argument("--project", help="the video it came from")
+    p.add_argument("--from", dest="source", choices=["user", "skill"], default="user")
+    p.add_argument("--all", action="store_true", help="list: include forgotten rules")
+    p.set_defaults(fn=cmd_taste)
     p = sp.add_parser("where", help="print install root and workspace"); p.set_defaults(fn=cmd_where)
 
     a = ap.parse_args(argv)

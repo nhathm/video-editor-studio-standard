@@ -1,6 +1,6 @@
 # Style questions (S3, ask once, before the preview)
 
-Ask in ONE message, in the user's language, numbered, each with the default first. If the user answers
+Read `nve taste prompt` first and skip the questions the user's taste already answers. Ask in ONE message, in the user's language, numbered, each with the default first. If the user answers
 "default" / "mặc định" / "như cũ", use the template defaults and skip the rest.
 
 1. **Frame / platform**: 9:16 TikTok/Reels (default) · 1:1 · 16:9 YouTube.

@@ -74,6 +74,9 @@ class Project:
 
 
 def create(ws: Path, files: list[Path], name: str | None = None, move: bool = False) -> Project:
+    """A new project. With no files a name is required (e.g. to analyse a reference video first)."""
+    if not files and not name:
+        raise NveError("Give the video/photo files, or a --name for an empty project.")
     files = [Path(f).expanduser().resolve() for f in files]
     for f in files:
         if not f.exists():

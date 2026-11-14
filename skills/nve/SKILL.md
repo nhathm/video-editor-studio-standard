@@ -41,7 +41,9 @@ every command prints JSON. **You decide; nve executes exactly what `storyboard.j
 11. **Cover**: always propose a cover (`storyboard.cover`: a strong frame time + a 2–6 word hook title,
    optional Noto emoji) and ask whether to also put it at the start of the video (`"prepend": true`, 1 s).
    The preview sheet shows it first.
-12. **Credits**: when the render returns `credits`, give the user those lines and say they must be pasted into
+12. **Taste**: every correction the user makes to an edit decision is recorded with `nve taste add` in their
+   words (`references/taste.md`); read `nve taste prompt` before planning and resolve every `taste_warnings`.
+13. **Credits**: when the render returns `credits`, give the user those lines and say they must be pasted into
    the post description (licence requirement of the bundled music / Noto emoji).
 
 ## Workflow
@@ -54,16 +56,18 @@ every command prints JSON. **You decide; nve executes exactly what `storyboard.j
 | New project | One project per video. Copy the user's files in. | `nve new <files…> --name "<name>"` |
 | S1 Ingest | Probe, transcribe (Scribe → whisper fallback), measure speech ratio, detect green screen. Read every `hint_*` / `next` field it returns. | `nve ingest <p> --language vi` |
 | S1b Transcript review | **Required when `needs_review` is true** (whisper, i.e. no ElevenLabs key). Read the numbered words, write spelling fixes from context to the corrections file, check. Never change timings. Tell the user it is a lower-precision transcript. | `nve transcript show <p>` → write `analysis/transcripts/<src>.corrections.json` → `nve transcript check <p>` (see `references/transcript-review.md`) |
-| S2 Analyze reference | **Only if the user asks** to analyse a sample video. | see `references/analyze.md` |
-| S3 Plan + style | Ask the style questions **once** (`references/style.md`); "mặc định" = template defaults. Draft, then edit the storyboard yourself (cuts, stamps, cards, keywords, music, CTA). Show `storyboard.md` and wait for G1. | `nve plan draft <p> [--template …] [--strategy …]` then edit `storyboard.json`, `nve plan refresh <p>` |
+| S2 Sample style | When the user shows a sample video to take the **style** from (fonts, colours, text, motion, pace, music mood): apply that design language to their own footage and words; never copy the sample's content. Follow `<install>/pro/skills/reference-style.md` when it exists, else `references/analyze.md`; never mention a missing tool to the user. | see `references/analyze.md` |
+| S3 Plan + style | Read the taste first (`nve taste prompt --template <id>`). Ask the style questions **once** (`references/style.md`), skipping what the taste answers; "mặc định" = template defaults + taste. Draft, then edit the storyboard yourself (cuts, stamps, cards, keywords, music, CTA). Show `storyboard.md` and wait for G1. | `nve plan draft <p> [--template …] [--strategy …]` then edit `storyboard.json`, `nve plan refresh <p>` |
 | S4 Preview | Stills with the look + text applied, from a fast low-res pass. Look at the sheet yourself first, fix problems, then show it and wait for G2. | `nve preview <p>` → `preview/sheet.jpg` |
 | S5–S8 Render | Cut + grade at full res, compose (HyperFrames → ffmpeg/ASS fallback), render ONE `final_vN.mp4` (+ `final_vN_cover.jpg` when `cover` is set; with `cover.prepend` the cover is also the first second of the video). Never overwrite earlier versions. `--phone` only if the user asks for a smaller copy. | `nve render <p>` |
 | S9 QC | Automatic after render (`renders/final_vN.qc.json`). Look at 2–3 frames of the final yourself before presenting. | `nve qc <p> renders/<file>` |
 
 Read the template's `rules.md` (`nve template show <id>` gives `_path`) before planning. Details:
 - `references/storyboard.md`: the storyboard format, blocks and their props, worked example.
+- `references/analyze.md`: taking the style of a sample video by hand (or the extra guide it points to).
 - `references/cut-strategies.md`: speech / visual / beat / hybrid and how to choose.
 - `references/style.md`: the style questions and the house style.
+- `references/taste.md`: the taste log: recording corrections, rules, metrics, cloud export/import.
 - `references/greenscreen.md`: when ingest reports a green screen: mirror (flip), key, background, person size.
 - `references/connections.md`: ElevenLabs, HeyGen, levels L0/L1/L2, keys on cloud.
 - `references/extending.md`: user templates/blocks/scripts, `extends`, never overriding core.

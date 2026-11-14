@@ -144,6 +144,62 @@ def draw_card(card: dict, W: int, pal: dict, font: dict, out: Path) -> tuple[int
     return img.width, img.height
 
 
+def _hex(c: str) -> tuple[int, int, int]:
+    c = c.lstrip("#")
+    return tuple(int(c[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def draw_wall(wall: dict, W: int, H: int, out: Path, scale: int = 2) -> Path:
+    """The wall picture cover-fitted to the frame (at `scale` x for a smooth zoom), with its tint."""
+    from PIL import Image, ImageChops
+    pic = Image.open(wall["img"]).convert("RGB")
+    tw, th = W * scale, H * scale
+    r = max(tw / pic.width, th / pic.height)
+    pic = pic.resize((max(tw, int(pic.width * r)), max(th, int(pic.height * r))), Image.LANCZOS)
+    x0, y0 = (pic.width - tw) // 2, (pic.height - th) // 2
+    pic = pic.crop((x0, y0, x0 + tw, y0 + th))
+    pr = wall["props"]
+    if pr.get("tint"):
+        tinted = ImageChops.multiply(pic, Image.new("RGB", pic.size, _hex(pr["tint"])))
+        pic = Image.blend(pic, tinted, float(pr.get("tint_opacity") or 0.55))
+    pic.save(out)
+    return out
+
+
+def draw_badge(wall: dict, W: int, font: dict, out: Path) -> tuple[int, int] | None:
+    """The badge in the middle of a wall: rounded box, optional eye / play icon, text."""
+    from PIL import Image, ImageDraw, ImageFont
+    pr = wall["props"]
+    if not pr.get("badge"):
+        return None
+    s = W / 1080
+    ff = font_file(font["title"])
+    f = ImageFont.truetype(str(ff), int(150 * s)) if ff else ImageFont.load_default()
+    txt = str(pr["badge"])
+    probe = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    tw = probe.textlength(txt, font=f)
+    icon = (pr.get("badge_icon") or "eye") if (pr.get("badge_icon") or "eye") in ("eye", "play") else None
+    isz, gap, px, py = int(130 * s), int(22 * s), int(56 * s), int(26 * s)
+    bw = int(tw + 2 * px + (isz + gap if icon else 0))
+    bh = int(max(isz, 150 * s) + 2 * py)
+    img = Image.new("RGBA", (bw + 20, bh + 20), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle((10, 10, bw + 10, bh + 10), radius=int(40 * s), fill=_hex(pr.get("badge_color") or "#E53935"))
+    x, cy = 10 + px, 10 + bh // 2
+    lw = max(3, int(10 * s))
+    if icon == "eye":
+        d.ellipse((x, cy - isz * 0.32, x + isz, cy + isz * 0.32), outline="white", width=lw)
+        rr = isz * 0.15
+        d.ellipse((x + isz / 2 - rr, cy - rr, x + isz / 2 + rr, cy + rr), outline="white", width=lw)
+    elif icon == "play":
+        d.polygon([(x + isz * 0.25, cy - isz * 0.35), (x + isz * 0.25, cy + isz * 0.35), (x + isz * 0.85, cy)], fill="white")
+    if icon:
+        x += isz + gap
+    d.text((x, cy), txt, font=f, fill="white", anchor="lm")
+    img.save(out)
+    return img.width, img.height
+
+
 class Ass(Engine):
     id, capability = "ass", "compose"
 
@@ -189,6 +245,23 @@ class Ass(Engine):
             cur, n = "[pv]", n + 1
             if any(ly.get("scale") for ly in plan["background"]["layers"]):
                 ctx.notes.append("compose.ass: per-section person zoom is not supported; one size used")
+        for w in plan.get("walls", []):  # full-screen pictures under cards and text, zooming towards their focus
+            st, en = w["start"], min(w["end"], END)
+            frames = max(2, int(round((en - st) * plan["fps"])))
+            draw_wall(w, W, H, work / f"wall{w['i']}.png")
+            (z0, z1), (fx, fy) = w["zoom"], w["focus"]
+            inputs += ["-loop", "1", "-t", f"{en - st + 0.2:.3f}", "-i", f"wall{w['i']}.png"]
+            vchain.append(f"[{n}:v]zoompan=z='{z0}+({z1}-{z0})*on/{frames - 1}':x='max(0,min(iw-iw/zoom,{fx}*iw-iw/zoom/2))':y='max(0,min(ih-ih/zoom,{fy}*ih-ih/zoom/2))'"
+                          f":d={frames}:s={W}x{H}:fps={plan['fps']},trim=end_frame={frames},setpts=PTS+{st:.3f}/TB[wz{n}]")
+            vchain.append(f"{cur}[wz{n}]overlay=0:0:eof_action=pass:enable='between(t,{st:.3f},{en:.3f})'[v{n}]")
+            cur, n = f"[v{n}]", n + 1
+            size = draw_badge(w, W, plan["font"], work / f"badge{w['i']}.png")
+            if size:
+                bw, bh = size
+                inputs += ["-loop", "1", "-t", f"{END:.3f}", "-i", f"badge{w['i']}.png"]
+                vchain.append(f"[{n}:v]format=rgba,fade=t=in:st={st + 0.12:.3f}:d=0.2:alpha=1[bd{n}]")
+                vchain.append(f"{cur}[bd{n}]overlay=x=({W}-{bw})/2:y=({H}-{bh})/2:enable='between(t,{st:.3f},{en:.3f})'[v{n}]")
+                cur, n = f"[v{n}]", n + 1
         for c in plan["cards"]:
             png = work / f"card{c['i']}.png"
             cw, chh = draw_card(c, W, plan["palette"], plan["font"], png)

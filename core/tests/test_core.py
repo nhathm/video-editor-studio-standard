@@ -4,9 +4,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from nve import registry, storyboard as SB, timeline
+from nve import compose_plan
 from nve.compose_plan import caption_groups
 from nve.engines.compose_ass import ass_color, ass_time, build_ass
 from nve.paths import INSTALL_ROOT, NveError
@@ -311,3 +313,246 @@ def test_resources_sparse_fetch_join_and_checksums(tmp_path, monkeypatch):
     g("commit", "-qam", "bad")
     with pytest.raises(NveError):
         resources.fetch("thing")
+
+
+# ── taste log ──
+def _taste_sb(**kw):
+    sb = {"schema": "nve.storyboard/1", "template": "core:talking-head", "cut_strategy": "speech",
+          "output": {"aspect": "9:16", "width": 1080, "height": 1920, "fps": 30, "speed": 1.15},
+          "style": {"caption": {"block": "core:caption.karaoke-pill", "group_max": 5}},
+          "sources": [{"id": "a", "path": "a.mp4", "kind": "video"}],
+          "tracks": {"video": [{"src": "a", "in": 0, "out": 30}], "overlay": [
+              {"block": "core:stamp.slam", "start": t, "end": t + 1, "props": {"text": "X", "emoji": ["1f604"]}}
+              for t in (1, 5, 9, 13)], "audio": [{"kind": "bgm", "asset": "lib:bgm/acoustic-01", "volume": 0.1}]}}
+    sb.update(kw)
+    return sb
+
+
+def test_taste_add_apply_check_forget(tmp_path):
+    from nve import taste
+    r1 = taste.add(tmp_path, "nhiều stamp quá", maxes=["stamps_per_min=6"])
+    r2 = taste.add(tmp_path, "chữ to lên", sets=["style.caption.size=0.07"], template="core:talking-head")
+    r3 = taste.add(tmp_path, "tiếng ting sến", ban_sfx=["ting"], source="skill")
+    assert [r1["id"], r2["id"], r3["id"]] == ["t1", "t2", "t3"]
+    assert 'you said): "nhiều stamp quá"' in taste.describe(r1) and "skill rule" in taste.describe(r3)
+    # only the right template gets the template rule
+    assert len(taste.rules_for(taste.load(tmp_path), "core:product-ad", ["core:product-ad"])) == 2
+    sb = _taste_sb()
+    applied = taste.apply_defaults(sb, taste.rules_for(taste.load(tmp_path), "core:talking-head"))
+    assert sb["style"]["caption"]["size"] == 0.07 and sb["style"]["ban_sfx"] == ["ting"] and len(applied) == 2
+    dur = 30 / 1.15
+    w = taste.check(sb, dur, tmp_path)
+    assert len(w) == 1 and "stamps_per_min" in w[0] and "nhiều stamp quá" in w[0]   # 4 stamps in 26 s ≈ 9.2/min
+    sb["tracks"]["audio"].append({"kind": "sfx", "asset": "lib:sfx/ting", "at": 2})
+    assert any("SFX 'ting' is used" in x for x in taste.check(sb, dur, tmp_path))
+    taste.set_active(tmp_path, "t1", False)
+    taste.set_active(tmp_path, "t3", False)
+    assert taste.check(sb, dur, tmp_path) == []
+    with pytest.raises(NveError):
+        taste.add(tmp_path, "x", sets=["gates.plan=1"])
+    with pytest.raises(NveError):
+        taste.add(tmp_path, "x", maxes=["zooms=2"])
+
+
+def test_taste_metrics_count_block_sfx():
+    from nve import taste
+    m = taste.metrics(_taste_sb(), 60.0)
+    assert m["stamps_per_min"] == 4 and m["emoji_per_min"] == 4 and m["caption_words_max"] == 5
+    blk = registry.resolve("core:stamp.slam", "block")
+    per = sum(1 for d in blk.get("default_sfx", []))  # every default fires: the stamps have emoji
+    assert m["sfx_per_min"] == 4 * per and m["bgm_volume"] == 0.1
+
+
+def test_taste_export_import_dedupes(tmp_path):
+    from nve import taste
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir(), b.mkdir()
+    taste.add(a, "nhạc nhỏ thôi", maxes=["bgm_volume=0.08"])
+    taste.add(a, "bỏ đi", ban_bgm=["acoustic-01"])
+    taste.set_active(a, "t2", False)
+    ex = taste.export(a)
+    assert len(ex["rules"]) == 1 and "id" not in ex["rules"][0]
+    assert taste.import_(b, ex)["added"] == ["t1"]
+    assert taste.import_(b, ex)["added"] == []
+    with pytest.raises(NveError):
+        taste.import_(b, {"rules": []})
+
+
+def test_banned_sfx_skipped_in_compose(tmp_path):
+    sb = _taste_sb()
+    words = []
+    plan = compose_plan.build(sb, words, tmp_path / "cut.mp4", 26.0, tmp_path, None)
+    names = {Path(s["path"]).stem for s in plan["sfx"]}
+    assert names
+    ban = sorted(names)[0]
+    sb["style"]["ban_sfx"] = [ban]
+    plan2 = compose_plan.build(sb, words, tmp_path / "cut.mp4", 26.0, tmp_path, None)
+    assert ban not in {Path(s["path"]).stem for s in plan2["sfx"]} and len(plan2["sfx"]) < len(plan["sfx"])
+
+
+# ── reference analysis: shot detection on synthetic clips with known answers ──
+def _ff(*args):
+    subprocess.run(["ffmpeg", "-v", "error", "-y", *map(str, args)], check=True)
+
+
+@pytest.fixture(scope="module")
+def synth(tmp_path_factory):
+    d = tmp_path_factory.mktemp("synth")
+    # hard cuts at 2.0, 3.5, 5.5 and a 5-frame insert (5.5-5.667)
+    _ff("-f", "lavfi", "-i", "testsrc2=s=160x284:r=30:d=2", "-f", "lavfi", "-i", "color=c=0x2050C0:s=160x284:r=30:d=1.5",
+        "-f", "lavfi", "-i", "mandelbrot=s=160x284:r=30", "-f", "lavfi", "-i", "color=c=0xC04020:s=160x284:r=30:d=0.15",
+        "-f", "lavfi", "-i", "testsrc=s=160x284:r=30:d=2", "-filter_complex",
+        "[2:v]trim=duration=2,setpts=PTS-STARTPTS[m];[0:v][1:v][m][3:v][4:v]concat=n=5:v=1[v]", "-map", "[v]",
+        "-pix_fmt", "yuv420p", d / "cuts.mp4")
+    # one moving picture with a 2-frame white flash at 1.5 s: no cut
+    _ff("-f", "lavfi", "-i", "testsrc2=s=160x284:r=30:d=3", "-vf",
+        "drawbox=c=white:t=fill:enable='between(n,45,46)'", "-pix_fmt", "yuv420p", d / "flash.mp4")
+    # fade to black and back in the middle of one moving picture, then a different picture
+    _ff("-f", "lavfi", "-i", "testsrc2=s=160x284:r=30:d=2", "-f", "lavfi", "-i", "mandelbrot=s=160x284:r=30",
+        "-filter_complex", "[0:v]fade=t=out:st=1.5:d=0.5[a];[1:v]trim=duration=2,setpts=PTS-STARTPTS,fade=t=in:st=0:d=0.5[b];"
+        "[a][b]concat=n=2:v=1[v]", "-map", "[v]", "-pix_fmt", "yuv420p", d / "fade.mp4")
+    # same still picture, framing jumps 24 px at 1.5 s (talking-head jump cut / punch-in)
+    _ff("-f", "lavfi", "-i", "testsrc2=s=240x284:r=30:d=0.04", "-frames:v", "1", d / "still.png")
+    _ff("-loop", "1", "-t", "1.5", "-i", d / "still.png", "-loop", "1", "-t", "1.5", "-i", d / "still.png",
+        "-filter_complex", "[0:v]crop=160:284:20:0,fps=30[a];[1:v]crop=160:284:44:0,fps=30[b];[a][b]concat=n=2:v=1[v]",
+        "-map", "[v]", "-pix_fmt", "yuv420p", d / "jump.mp4")
+    return d
+
+
+def test_shots_hard_cuts_and_short_insert(synth):
+    from nve.analyze import shots as S
+    sh = S.shots_of(str(synth / "cuts.mp4"), 30)
+    assert [s["start"] for s in sh] == [0.0, 2.0, 3.5, 5.5, 5.667]
+    assert all(s["transition_in"] == "cut" for s in sh[1:])
+    p = S.pace(sh, sh[-1]["end"])
+    assert p["shots"] == 5 and p["shortest_s"] < 0.2 and p["transitions"] == {"cut": 4}
+
+
+def test_shots_flash_is_not_a_cut(synth):
+    from nve.analyze import shots as S
+    assert len(S.shots_of(str(synth / "flash.mp4"), 30)) == 1
+
+
+def test_shots_fade_and_jump_cut(synth):
+    from nve.analyze import shots as S
+    fade = S.shots_of(str(synth / "fade.mp4"), 30)
+    assert len(fade) == 2 and abs(fade[1]["start"] - 2.0) < 0.1
+    jump = S.shots_of(str(synth / "jump.mp4"), 30)
+    assert len(jump) == 2 and abs(jump[1]["start"] - 1.5) < 0.05 and jump[1]["transition_in"] in ("jump", "cut")
+
+
+def test_hsv_hist_matches_known_colours():
+    from nve.analyze import shots as S
+    red = np.zeros((4, 4, 3), np.uint8); red[..., 2] = 255
+    blue = np.zeros((4, 4, 3), np.uint8); blue[..., 0] = 255
+    assert S.bhattacharyya(S.hsv_hist(red), S.hsv_hist(red)) < 1e-3
+    assert S.bhattacharyya(S.hsv_hist(red), S.hsv_hist(blue)) > 0.99
+
+
+# ── reference analysis: beat / tempo on synthetic tracks ──
+def _wav(path, x, sr=22050):
+    import wave
+    y = (np.clip(x, -1, 1) * 32767).astype("<i2")
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr); w.writeframes(y.tobytes())
+    return path
+
+
+def _music(bpm=120.0, secs=20.0, drums=True, sr=22050):
+    t = np.arange(int(secs * sr)) / sr
+    x = 0.15 * (np.sin(2 * np.pi * 220 * t) + np.sin(2 * np.pi * 277.2 * t) + np.sin(2 * np.pi * 329.6 * t))
+    if drums:
+        rng = np.random.default_rng(0)
+        hit = rng.standard_normal(int(0.04 * sr)) * np.exp(-np.linspace(0, 8, int(0.04 * sr)))
+        for k in np.arange(0, secs, 60 / bpm):
+            i = int(k * sr)
+            x[i:i + len(hit)] += 0.9 * hit[: len(x) - i]
+    return x
+
+
+def test_beat_tempo_grid_and_cuts_on_beat(tmp_path):
+    from nve.analyze import beat
+    p = _wav(tmp_path / "m120.wav", _music(120))
+    on = beat.analyze(p, cut_times=[2.0, 4.0, 6.5, 9.0, 12.0, 15.5])
+    m = on["music"]
+    assert on["has_audio"] and m["present"] and abs(m["bpm"] - 120) <= 3
+    gaps = np.diff(m["beats"])
+    assert abs(float(np.median(gaps)) - 0.5) < 0.03 and min(abs(b - 2.0) for b in m["beats"]) < 0.05
+    assert on["cuts_on_beat"] == 1.0 and on["beat_synced_edit"]
+    off = beat.analyze(p, cut_times=[1.23, 3.71, 6.27, 8.81, 11.13, 14.37])
+    assert off["cuts_on_beat"] < 0.4 and not off["beat_synced_edit"]
+
+
+def test_beat_other_tempo_and_no_drums(tmp_path):
+    from nve.analyze import beat
+    m = beat.analyze(_wav(tmp_path / "m95.wav", _music(95)))["music"]
+    assert abs(m["bpm"] - 95) <= 3 or abs(m["bpm"] - 190) <= 6
+    pad = beat.analyze(_wav(tmp_path / "pad.wav", _music(drums=False)))["music"]
+    assert pad.get("no_beat") or "bpm" not in pad or not pad["present"]
+    silent = beat.analyze(_wav(tmp_path / "quiet.wav", np.zeros(22050 * 3)))
+    assert not silent.get("music", {}).get("present", False)
+
+
+# ── block core:media.wall ──
+def test_media_wall_plan_offsets_and_drawings(tmp_path):
+    from PIL import Image
+    from nve.engines import compose_ass as CA
+    from nve.engines.compose_hyperframes import _wall_offset
+    Image.new("RGB", (400, 700), (40, 120, 200)).save(tmp_path / "wall.jpg")
+    sb = _taste_sb()
+    sb["tracks"]["overlay"] = [{"block": "core:media.wall", "start": 0.4, "end": 2.6,
+                                "props": {"img": "wall.jpg", "focus": [1.4, 0.9], "zoom": [0.5, 2.2], "tint": "#B3121B", "badge": "140"}}]
+    plan = compose_plan.build(sb, [], tmp_path / "cut.mp4", 8.0, tmp_path, None)
+    w = plan["walls"][0]
+    assert w["focus"] == [1.0, 0.9] and w["zoom"] == [1.0, 2.2]          # clamped into range
+    assert any("whoosh" in Path(x["path"]).stem for x in plan["sfx"])
+    assert _wall_offset(0.5, 0.5, 1.0, 1080, 1920) == (0, 0)
+    assert _wall_offset(0.5, 0.5, 2.0, 1080, 1920) == (-540, -960)        # centre stays centred
+    assert _wall_offset(1.0, 1.0, 2.0, 1080, 1920) == (-1080, -1920)      # clamped: no empty edge
+    pic = Image.open(CA.draw_wall(w, 108, 192, tmp_path / "w.png"))
+    assert pic.size == (216, 384) and pic.getpixel((10, 10))[0] < 40       # tint darkens the blue towards red
+    size = CA.draw_badge(w, 1080, {"title": "Anton"}, tmp_path / "b.png")
+    assert size and size[0] > size[1] > 100
+
+
+def test_media_walls_back_to_back_are_joined(tmp_path):
+    from PIL import Image
+    Image.new("RGB", (40, 70)).save(tmp_path / "wall.jpg")
+    sb = _taste_sb()
+    sb["tracks"]["overlay"] = [{"block": "core:media.wall", "start": s, "end": e, "props": {"img": "wall.jpg"}}
+                               for s, e in ((0.4, 2.7), (2.72, 4.3), (5.0, 6.0))]
+    w = compose_plan.build(sb, [], tmp_path / "cut.mp4", 8.0, tmp_path, None)["walls"]
+    assert w[0]["end"] == 2.72 and w[0].get("cut_out") and w[1].get("cut_in")
+    assert not w[1].get("cut_out") and not w[2].get("cut_in")
+
+
+def test_beat_character_energy_and_mood(tmp_path):
+    from nve.analyze import beat
+    fast = beat.analyze(_wav(tmp_path / "f.wav", _music(140)))["music"]["character"]
+    pad = beat.analyze(_wav(tmp_path / "p.wav", _music(drums=False)))["music"]["character"]
+    assert fast["energy"] in ("medium", "high") and pad["energy"] == "low"
+    assert fast["drums"] > pad["drums"] and pad["mood_hint"] and fast["measured_without_voice"]
+
+
+def test_beat_character_ignores_speech_like_hits_without_a_clear_beat(tmp_path):
+    from nve.analyze import beat
+    rng = np.random.default_rng(1)
+    sr = 22050
+    x = _music(drums=False) * 0.6
+    for k in rng.uniform(0, 19.5, 120):          # irregular clicks, like consonants: no tempo
+        i = int(k * sr)
+        x[i:i + 300] += rng.standard_normal(300) * 0.5
+    c = beat.analyze(_wav(tmp_path / "s.wav", x))["music"].get("character", {})
+    assert not c.get("clear_beat") or c.get("energy") != "high"
+
+
+def test_pro_commands_hidden_without_pro(monkeypatch, capsys):
+    from nve import cli, pro
+    monkeypatch.setattr(pro, "available", lambda: False)
+    with pytest.raises(SystemExit):
+        cli.main(["ref", "p", "x.mp4"])
+    err = capsys.readouterr().err
+    assert "invalid choice" in err and "Pro" not in err
+    with pytest.raises(NveError) as e:
+        pro.load("ref", "Reference style")
+    assert "Do not mention it to the user" in str(e.value)

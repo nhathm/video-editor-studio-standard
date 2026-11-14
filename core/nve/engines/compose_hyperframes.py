@@ -38,6 +38,20 @@ def _font_faces(families: set[str], assets_dir: Path) -> str:
     return "\n".join(css)
 
 
+EYE_SVG = ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" '
+           'stroke-linejoin="round"><path d="M1.5 12S5.5 4.5 12 4.5 22.5 12 22.5 12 18.5 19.5 12 19.5 1.5 12 1.5 12Z"/>'
+           '<circle cx="12" cy="12" r="3.4"/></svg>')
+PLAY_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg>'
+
+
+def _wall_offset(fx: float, fy: float, z: float, W: int, H: int) -> tuple[int, int]:
+    """Translation (px, with transform-origin 0 0) that brings the focus point to the centre at scale z, clamped so
+    the picture always covers the frame."""
+    tx = -min(max(fx * W * z - W / 2, 0), W * z - W)
+    ty = -min(max(fy * H * z - H / 2, 0), H * z - H)
+    return int(round(tx)), int(round(ty))
+
+
 def write_project(plan: dict, motion: Path) -> None:
     W, H, END = plan["W"], plan["H"], plan["duration"]
     s = W / 1080
@@ -52,8 +66,33 @@ def write_project(plan: dict, motion: Path) -> None:
         cut.unlink()
     shutil.copy2(plan["video"], cut)
 
-    # ── graphics: cards + stamps ──
+    # ── graphics: walls (under everything), cards, stamps ──
     Hh, J, LOT = [], [], {}
+    for w in plan.get("walls", []):
+        i, st, en, pr = w["i"], w["start"], w["end"], w["props"]
+        img = A / "img" / f"wall{i}{Path(w['img']).suffix}"
+        shutil.copy2(w["img"], img)
+        fx, fy = w["focus"]
+        z0, z1 = w["zoom"]
+        tint = (f'<div class="wtint" style="background:{html.escape(pr["tint"])};opacity:{float(pr.get("tint_opacity") or 0.55)}"></div>'
+                if pr.get("tint") else "")
+        badge = ""
+        if pr.get("badge"):
+            icon = {"eye": EYE_SVG, "play": PLAY_SVG}.get(pr.get("badge_icon") or "eye", "")
+            badge = (f'<div class="wbadge-w"><div id="wl{i}-b" class="wbadge" style="background:{html.escape(pr.get("badge_color") or "#E53935")}">'
+                     f'{icon}<span>{html.escape(str(pr["badge"]))}</span></div></div>')
+        Hh.append(f'    <div id="wl{i}" class="clip wall" data-start="{st:.3f}" data-duration="{en - st:.3f}">'
+                  f'<img id="wl{i}-i" class="wimg" src="assets/img/{img.name}" alt="">'
+                  f'{tint}{badge}</div>')
+        if not w.get("cut_in"):
+            J.append(f'tl.fromTo("#wl{i}", {{ opacity: 0 }}, {{ opacity: 1, duration: 0.1, ease: "none" }}, {st:.3f});')
+        (x0, y0), (x1, y1) = _wall_offset(fx, fy, z0, W, H), _wall_offset(fx, fy, z1, W, H)
+        J.append(f'tl.fromTo("#wl{i}-i", {{ scale: {z0}, x: {x0}, y: {y0} }}, {{ scale: {z1}, x: {x1}, y: {y1}, '
+                 f'duration: {en - st:.3f}, ease: "power2.inOut" }}, {st:.3f});')
+        if badge:
+            J.append(f'tl.fromTo("#wl{i}-b", {{ opacity: 0, scale: 0.4 }}, {{ opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2.2)" }}, {st + 0.12:.3f});')
+        if not w.get("cut_out"):
+            J.append(f'tl.fromTo("#wl{i}", {{ opacity: 1 }}, {{ opacity: 0, duration: 0.08, ease: "none", immediateRender: false }}, {max(st, en - 0.08):.3f});')
     for c in plan["cards"]:
         i, st, en = c["i"], c["start"], c["end"]
         img = A / "img" / f"card{i}{Path(c['img']).suffix}"
@@ -94,6 +133,12 @@ def write_project(plan: dict, motion: Path) -> None:
     (motion / "compositions/graphics.html").write_text(f"""<template>
   <style>
     #root {{ position: absolute; inset: 0; font-family: "{font['title']}", sans-serif; }}
+    .wall {{ position: absolute; inset: 0; overflow: hidden; background: #000; }}
+    .wimg {{ position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform-origin: 0 0; }}
+    .wtint {{ position: absolute; inset: 0; mix-blend-mode: multiply; }}
+    .wbadge-w {{ position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }}
+    .wbadge {{ display: flex; align-items: center; gap: {int(22 * s)}px; color: #fff; font-weight: 900; font-size: {int(150 * s)}px; line-height: 1; padding: {int(26 * s)}px {int(56 * s)}px; border-radius: {int(40 * s)}px; box-shadow: 0 0 0 {max(2, int(6 * s))}px rgba(255,255,255,.18), 0 30px 80px rgba(0,0,0,.45); }}
+    .wbadge svg {{ width: {int(130 * s)}px; height: {int(130 * s)}px; }}
     .cdw {{ position: absolute; left: 0; right: 0; display: flex; justify-content: center; }}
     .card {{ position: relative; width: {int(480 * s)}px; background: rgba(255,255,255,.96); border-radius: {int(36 * s)}px; padding: {int(22 * s)}px {int(22 * s)}px {int(70 * s)}px; box-shadow: 0 20px 50px rgba(31,42,68,.3); border: {max(2, int(6 * s))}px solid {ACC}; }}
     .card img {{ display: block; width: 100%; height: {int(250 * s)}px; object-fit: contain; border-radius: {int(18 * s)}px; }}

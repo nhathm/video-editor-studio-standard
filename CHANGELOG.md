@@ -2,6 +2,14 @@
 
 Versions go up by 0.1 per release (0.3 → 0.4 → 0.5…) unless a number is chosen. (0.2 was skipped.) `stable` always points at the latest release tag.
 
+## 0.9.0 — 2026-11-14
+- Taste log (`nve taste`, `references/taste.md`): every correction the user makes is kept in `<workspace>/taste.json` in their words, with optional defaults (`--set style.*/output.*`), limits on storyboard metrics (`--max stamps_per_min=5`, …) and banned SFX/music. `nve plan draft` applies the defaults and bans, `nve plan refresh` / `nve preview` return `taste_warnings`, banned SFX are skipped in the mix (`style.ban_sfx`). Cloud: `nve taste export` / `import` carry it between chats. Idea from kurbaitaev/ghost-editor (MIT).
+- Sample style by hand (`references/analyze.md`): when the user shows a sample video, Claude takes its design language (fonts, colours, text treatments, pace, music feel) and applies it to the user's own footage and words; the sample's content is never copied and the scratch project is deleted afterwards.
+- Better shot detection for `nve shots` and the visual cut strategy: same-camera jump cuts, flashes no longer counted as cuts, fades through black or white, short inserts kept, fade-in openings joined to the first shot. Adapted from rea-video (Apache-2.0, `core/nve/analyze/NOTICE`), numpy only; ffmpeg scene detection stays as the fallback.
+- Soundtrack analysis (`nve.analyze.beat`, adapted from rea-video): voice / music presence, tempo with half / double alternatives, beat grid, music sections, a no-drums guard, whether cuts land on the beat, and the music's character (brightness, drums, energy, mood hint; tempo and drums only count with a clear beat, so speech is not mistaken for drums). Groundwork for the beat cut strategy.
+- New block `core:media.wall`: a full-screen picture over the talking video while the voice keeps going (e.g. a wall of the creator's past videos), zooming towards a focus point brought to the centre as far as the edges allow, with an optional tint and a centre badge (view count with an eye icon). Back-to-back walls join with a hard cut. Both compose engines (HyperFrames; ffmpeg zoompan in the ASS fallback).
+- `nve new --name <name>` without files makes an empty project.
+
 ## 0.8.0 — 2026-11-14
 - Shell skill (`shells/nve/SKILL.md`) is now written in English like every other skill file; behaviour unchanged (git clone first, `add_repo` as fallback, short non-technical replies in the user's language).
 - Style questions (`references/style.md`) are written in English and asked in the user's language; the key warning in `references/connections.md` is said in the user's language.

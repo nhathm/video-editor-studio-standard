@@ -1,0 +1,22 @@
+{
+  "id": "core:media.wall",
+  "version": "1",
+  "kind": "overlay",
+  "label": {"vi": "Ảnh phủ toàn màn hình + zoom", "en": "Full-screen picture with a zoom"},
+  "description": "A picture over the whole frame while the voice keeps going (e.g. a wall of the creator's past videos), the camera zooming towards `focus`. Optional colour tint (e.g. red for 'bad numbers') and a badge in the middle (e.g. a view count with an eye icon). Stamps and captions stay on top.",
+  "engines": ["hyperframes", "ass"],
+  "props": {
+    "img": {"type": "string", "required": true, "doc": "project path (assets/x.jpg) or lib:img/<name>"},
+    "focus": {"type": "array", "default": [0.5, 0.5], "doc": "point to zoom towards as [x, y] fractions of the picture; it moves to the centre as far as the edges allow"},
+    "zoom": {"type": "array", "default": [1.0, 1.35], "doc": "scale at start and end"},
+    "tint": {"type": "string", "default": "", "doc": "colour laid over the picture, e.g. #B3121B; empty = none"},
+    "tint_opacity": {"type": "number", "default": 0.55},
+    "badge": {"type": "string", "default": "", "doc": "short text in a rounded box in the middle, e.g. 218"},
+    "badge_icon": {"type": "string", "default": "eye", "doc": "eye | play | none"},
+    "badge_color": {"type": "string", "default": "#E53935"}
+  },
+  "min_duration": 0.5,
+  "default_sfx": [
+    {"asset": "lib:sfx/whoosh-short", "at": -0.05, "volume": 0.35}
+  ]
+}

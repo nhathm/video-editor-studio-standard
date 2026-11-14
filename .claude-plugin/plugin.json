@@ -1,6 +1,6 @@
 {
   "name": "nve",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "nve-studio: storyboard-driven video editing (cuts, filler removal, look, karaoke captions, stamps, SFX, music) with /nve.",
   "author": {"name": "nhathm"},
   "hooks": "./hooks/hooks.json"

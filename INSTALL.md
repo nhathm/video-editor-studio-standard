@@ -32,6 +32,8 @@ Mỗi video một đoạn chat mới.
 
 ## Trên máy tính (Claude Code)
 
+Xem hướng dẫn theo máy: [Mac](INSTALL-mac.md) · [Windows](INSTALL-windows.md).
+
 **1. Tạo thư mục làm việc.** Tạo một thư mục trống (ví dụ `Video Editor`), rồi mở Claude Code trong thư
 mục đó (app desktop: chọn thư mục khi tạo phiên; terminal: `cd` vào thư mục rồi gõ `claude`). Video, dự
 án và key của bạn sẽ nằm ở đây.

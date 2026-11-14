@@ -32,6 +32,13 @@ Hugging Face whisper models are blocked, so `nve doctor` reports `captions: []` 
 words; tell the user that in one line and do not send them to the allowlist settings. The newbie edition
 instead fetches whisper-small from its GitHub mirror (cached in `~/.cache/nve/whisper-small`).
 
+## Reference links (optional)
+
+When `nve ref` exists, it downloads a sample video with yt-dlp (`pip install -U yt-dlp` in the sandbox first). The sandbox can
+only fetch it when the platform is in the allowlist (`youtube.com`, `*.youtube.com`, `*.googlevideo.com`;
+`facebook.com`, `*.facebook.com`, `*.fbcdn.net`; `tiktok.com`, `*.tiktok.com`, `*.tiktokcdn.com`), and YouTube
+often refuses servers even then. When the download fails, ask the user in one line to send the video file.
+
 ## Per conversation
 
 `nve doctor` reports `runtime=cloud` when `/mnt/user-data` or `/mnt/skills` exists.
@@ -50,3 +57,4 @@ instead fetches whisper-small from its GitHub mirror (cached in `~/.cache/nve/wh
   (`pip install opencv-python-headless` if PyPI is reachable); without it the look is approximated.
 - Keep videos short (≤ 1–3 min): CPU and time are limited. Measure on the first run and tell the user.
 - Keys: see `connections.md` (cloud-only consent rule).
+- Taste (`taste.md`): lives only in this thread; at delivery give the user `nve taste export` to paste next time.
