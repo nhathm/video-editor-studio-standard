@@ -22,7 +22,8 @@ CACHE_TTL = 24 * 3600
 # api.elevenlabs.io: Scribe transcripts. huggingface.co / *.huggingface.co / *.hf.co: whisper model files.
 ALLOWLIST_DOMAINS = ["api.elevenlabs.io", "huggingface.co", "*.huggingface.co", "*.hf.co"]
 NET_PROBES = {"api.elevenlabs.io": "https://api.elevenlabs.io/v1/models",
-              "huggingface.co": "https://huggingface.co/api/models/Systran/faster-whisper-small"}
+              "huggingface.co": "https://huggingface.co/api/models/Systran/faster-whisper-small",
+              "github.com": "https://github.com"}
 
 
 def probe_url(url: str, timeout: float = 6) -> bool:
@@ -45,7 +46,7 @@ HYPERFRAMES_VERSION = "0.9.23"
 
 
 def detect_runtime() -> str:
-    if Path("/mnt/user-data").exists() or Path("/mnt/skills").exists():
+    if Path("/mnt/user-data").exists() or Path("/mnt/skills").exists() or Path("/home/claude").is_dir():
         return "cloud"
     if os.environ.get("CLAUDECODE") == "1" or os.environ.get("CLAUDE_CODE_ENTRYPOINT"):
         return "claude-code"
@@ -94,9 +95,45 @@ def get_key(name: str, ws: Path | None) -> str | None:
 
 
 def detect_edition() -> dict:
-    # The public Standard export has no pro/ folder at all; the private repo always has one.
+    """Public exports carry EDITION.json (tier standard/newbie; `resources`: ids from resources.json the
+    edition may fetch from git, e.g. newbie's whisper model).
+    Without it: the private repo (has pro/) is Pro, anything else Standard."""
+    f = INSTALL_ROOT / "EDITION.json"
+    if f.exists():
+        try:
+            ed = json.loads(f.read_text())
+            if ed.get("tier"):
+                return ed
+        except (OSError, ValueError):
+            pass
     tier = "pro" if (PRO_ROOT / "LICENSES.json").exists() or (PRO_ROOT / "packs").is_dir() else "standard"
     return {"tier": tier}
+
+
+def _npmrc_prefix() -> str | None:
+    f = Path.home() / ".npmrc"
+    try:
+        for line in f.read_text().splitlines():
+            k, _, v = line.partition("=")
+            if k.strip() == "prefix" and v.strip():
+                return os.path.expanduser(v.strip())
+    except OSError:
+        pass
+    return None
+
+
+def npx(node: dict, args: list[str], *, timeout: float = 3600, check: bool = False):
+    """Run `npx hyperframes@<pinned> <args>` (all path args must be absolute).
+    Runs from a neutral temp folder: on claude.ai a ~/.npmrc that sets `prefix` becomes "project config"
+    when the cwd is the home folder, and npm refuses ("prefix cannot be changed from project config")."""
+    import tempfile
+    env = {**os.environ, "PATH": node["bin_dir"] + os.pathsep + os.environ.get("PATH", "")}
+    prefix = _npmrc_prefix()
+    if prefix and "npm_config_prefix" not in env:
+        env["npm_config_prefix"] = prefix
+    cwd = Path(tempfile.gettempdir()) / "nve-npx"
+    cwd.mkdir(parents=True, exist_ok=True)
+    return run(["npx", "-y", f"hyperframes@{HYPERFRAMES_VERSION}", *args], env=env, cwd=cwd, timeout=timeout, check=check)
 
 
 def doctor(ws: Path | None, refresh: bool = False, deep: bool = False) -> dict:
@@ -127,8 +164,7 @@ def doctor(ws: Path | None, refresh: bool = False, deep: bool = False) -> dict:
     keys = {"elevenlabs": bool(get_key("ELEVENLABS_API_KEY", ws))}
     heygen = None
     if deep and node:
-        env = {**os.environ, "PATH": node["bin_dir"] + os.pathsep + os.environ.get("PATH", "")}
-        r = run(["npx", "-y", f"hyperframes@{HYPERFRAMES_VERSION}", "auth", "status"], check=False, env=env, timeout=60)
+        r = npx(node, ["auth", "status"], timeout=60)
         out = (r.stdout or "") + (r.stderr or "")
         heygen = bool(re.search(r"logged in|authenticated|valid", out, re.I)) and not re.search(r"not logged|expired", out, re.I)
     keys["heygen"] = heygen
@@ -142,10 +178,19 @@ def doctor(ws: Path | None, refresh: bool = False, deep: bool = False) -> dict:
         "grade.numpy": opencv,
         "grade.ffmpeg": bool(tools["ffmpeg"]),
     }
+    edition = detect_edition()
+    reach = lambda host: network is None or network.get(host, True)  # noqa: E731
+    captions = []
+    if keys["elevenlabs"] and reach("api.elevenlabs.io"):
+        captions.append("scribe")
+    if reach("huggingface.co"):
+        captions.append("whisper")
+    if "whisper-small" in (edition.get("resources") or []) and reach("github.com"):
+        captions.append("whisper-git")
     level = "L0" + ("+elevenlabs" if keys["elevenlabs"] else "") + ("+heygen" if heygen else "")
     data = {"nve_version": __version__, "checked_at": int(time.time()), "runtime": runtime,
             "install_root": str(INSTALL_ROOT), "workspace": str(ws) if ws else None,
-            "edition": detect_edition(), "tools": tools, "node": node, "opencv": opencv,
+            "edition": edition, "captions": captions, "tools": tools, "node": node, "opencv": opencv,
             "keys": keys, "network": network, "capabilities": caps, "level": level, "cached": False}
     if cache:
         dump_json(cache, data)
@@ -169,8 +214,15 @@ def format_report(d: dict) -> str:
     if net is not None:
         for host, reachable in net.items():
             lines.append(f"  {ok(reachable)} network {host} {'reachable' if reachable else 'BLOCKED'}")
-        if not all(net.values()):
-            lines.append("  -> blocked: on claude.ai open Settings > Capabilities (web or desktop app; the iOS app has no "
-                         "such field) and add to Additional allowed domains: " + ", ".join(ALLOWLIST_DOMAINS)
-                         + ". Account-wide: chats on the phone use it too. Then start a new chat.")
+        caps = d.get("captions")
+        if caps == []:
+            # Typical of the claude.ai Free plan: only package hosts are reachable and domains cannot be added.
+            lines.append("  -> no automatic captions here: paste the spoken words to make captions.")
+            if (d.get("edition") or {}).get("tier") == "standard":
+                lines.append("     (with Claude Pro you can allow the download hosts and get automatic captions)")
+        elif caps == ["whisper-git"]:
+            lines.append("  -> captions: whisper model from nve-resources on GitHub (Hugging Face blocked)")
+        if not all(v for h, v in net.items() if h != "github.com") and caps != ["whisper-git"]:
+            lines.append("  -> Claude Pro or higher: Settings > Capabilities (web or desktop app) > Additional allowed domains: "
+                         + ", ".join(ALLOWLIST_DOMAINS) + ". Account-wide; then start a new chat.")
     return "\n".join(lines)

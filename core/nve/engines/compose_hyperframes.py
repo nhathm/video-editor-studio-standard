@@ -245,7 +245,8 @@ class HyperFrames(Engine):
         return (True, "") if ctx.env.get("node") else (False, "node >= 22 not found")
 
     def _cli(self, ctx: Ctx, *args: str, timeout: float = 3600):
-        return run(["npx", "-y", f"hyperframes@{HYPERFRAMES_VERSION}", *args], env=_env(ctx), timeout=timeout, check=False)
+        from nve.env import npx
+        return npx(ctx.env["node"], list(args), timeout=timeout)
 
     def run(self, job: dict, ctx: Ctx) -> dict:
         motion = Path(job["work"]) / "motion"

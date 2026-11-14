@@ -127,9 +127,9 @@ def fetch_bgm(ctx, intent: str, name: str | None = None) -> dict:
         raise NveError("HeyGen music needs Node >= 22 (not available here). Use a bundled track: nve assets list bgm")
     tmp = ctx.workspace / ".nve" / "media"
     tmp.mkdir(parents=True, exist_ok=True)
-    env = {**os.environ, "PATH": ctx.env["node"]["bin_dir"] + os.pathsep + os.environ.get("PATH", "")}
-    r = run(["npx", "-y", f"hyperframes@{HYPERFRAMES_VERSION}", "media-use", "resolve", "--type", "bgm", "--intent", intent,
-             "--project", str(tmp), "--json"], env=env, check=False, timeout=600)
+    from nve.env import npx
+    r = npx(ctx.env["node"], ["media-use", "resolve", "--type", "bgm", "--intent", intent, "--project", str(tmp), "--json"],
+            timeout=600)
     text = (r.stdout or "") + (r.stderr or "")
     if r.returncode != 0:
         if re.search(r"auth|login|unauthor", text, re.I):

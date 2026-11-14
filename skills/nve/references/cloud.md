@@ -26,6 +26,12 @@ The sandbox may only reach allowed domains. nve needs:
 
 `nve connect network` prints the same steps.
 
+**Free plan** (not a target: nve is for paid plans, Claude Pro or higher): only package hosts (github.com, PyPI, npm, …) are reachable and no domain can be added; there
+is no `add_repo`. nve still cuts, grades and renders (compose falls back to ASS). Captions: Scribe and the
+Hugging Face whisper models are blocked, so `nve doctor` reports `captions: []` and says to paste the spoken
+words; tell the user that in one line and do not send them to the allowlist settings. The newbie edition
+instead fetches whisper-small from its GitHub mirror (cached in `~/.cache/nve/whisper-small`).
+
 ## Per conversation
 
 `nve doctor` reports `runtime=cloud` when `/mnt/user-data` or `/mnt/skills` exists.

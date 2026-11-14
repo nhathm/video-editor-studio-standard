@@ -1,6 +1,6 @@
 [project]
 name = "nve"
-version = "0.6.0"
+version = "0.7.1"
 description = "nve-studio: storyboard-driven video editing engine behind the /nve Claude skill"
 requires-python = ">=3.10"
 dependencies = ["numpy", "pillow"]

@@ -106,9 +106,8 @@ class KeyFill(Engine):
         W, H, fps = job["width"], job["height"], job["fps"]
         matte = out.with_name(out.stem + "_matte.webm")
         if not matte.exists() or matte.stat().st_mtime < src.stat().st_mtime:
-            env = {**os.environ, "PATH": ctx.env["node"]["bin_dir"] + os.pathsep + os.environ.get("PATH", "")}
-            r = run(["npx", "-y", f"hyperframes@{HYPERFRAMES_VERSION}", "remove-background", str(src), "-o", str(matte),
-                     "--quality", "balanced"], env=env, check=False, timeout=7200)
+            from nve.env import npx
+            r = npx(ctx.env["node"], ["remove-background", str(src), "-o", str(matte), "--quality", "balanced"], timeout=7200)
             if r.returncode != 0 or not matte.exists():
                 raise EngineFailed("AI matte failed: " + (r.stderr or r.stdout or "")[-300:])
         screen = _hex_rgb(job.get("screen") or "#1D754E")

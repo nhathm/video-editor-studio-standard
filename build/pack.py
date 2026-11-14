@@ -48,7 +48,7 @@ def build(edition: str) -> Path:
         shutil.rmtree(out)
     skill = out / "nve"
     copy(ROOT / "skills" / "nve", skill)                      # SKILL.md, references/, bin/
-    for item in ("core/nve", "templates/core", "blocks/core", "packs", "engines.json"):
+    for item in ("core/nve", "templates/core", "blocks/core", "packs", "engines.json", "resources.json"):
         copy(ROOT / item, skill / item)
     if ed["tier"] == "pro":
         copy(ROOT / "pro", skill / "pro")

@@ -11,13 +11,16 @@ Hướng dẫn đầy đủ của skill này **không nằm ở đây** mà ở 
 
 Đầu tiên xác định đang chạy ở đâu. Chỉ trường hợp A (claude.ai) mới tải và chạy nve trên cloud.
 
-## A. claude.ai (web hoặc app điện thoại): có công cụ `add_repo`, thư mục `/home/claude`
+## A. claude.ai (web hoặc app điện thoại, gói Free hoặc trả phí): có `/mnt/user-data` hoặc `/home/claude`
 
-1. **Lấy repo** (chỉ bản mới nhất):
-   - chưa có `/home/claude/video-editor-studio-standard`: gọi `add_repo` cho `nhathm/video-editor-studio-standard` (access
-     read) rồi clone theo hướng dẫn của tool vào `/home/claude/video-editor-studio-standard`, `--depth 1 --branch stable`;
-   - đã có: `git -C /home/claude/video-editor-studio-standard fetch -q --depth 1 origin stable && git -C /home/claude/video-editor-studio-standard reset -q --hard origin/stable`.
-2. `REPO=/home/claude/video-editor-studio-standard`. Workspace: `export NVE_WORKSPACE=/tmp/nve-ws`, chạy `nve init /tmp/nve-ws`.
+1. **Lấy repo** (bản mới nhất), `REPO=/tmp/video-editor-studio-standard`:
+   - chưa có `$REPO`: `GIT_TERMINAL_PROMPT=0 git clone -q --depth 1 --branch stable https://github.com/nhathm/video-editor-studio-standard.git $REPO`.
+     Lỗi thì chạy lại đúng 1 lần. Vẫn lỗi **và** có công cụ `add_repo` → gọi `add_repo` cho
+     `nhathm/video-editor-studio-standard` (access read) rồi clone theo hướng dẫn của tool vào `$REPO`
+     (`--depth 1 --branch stable`). Không có `add_repo` → báo người dùng một dòng kèm lỗi, dừng.
+   - đã có: `git -C $REPO fetch -q --depth 1 origin stable && git -C $REPO reset -q --hard origin/stable`
+     (lỗi thì dùng bản đang có).
+2. Workspace: `export NVE_WORKSPACE=/tmp/nve-ws`, chạy `nve init /tmp/nve-ws`.
 3. Đọc thêm `$REPO/skills/nve/references/cloud.md`.
 
 ## B. Claude Code (CLI, tab Code trong app desktop, IDE) trên Mac / Windows / Linux
@@ -39,8 +42,6 @@ Người dùng không rành kỹ thuật. Trả lời ngắn (1–3 câu), nói 
 - Đọc toàn bộ `$REPO/skills/nve/SKILL.md` và làm theo **chính xác**. Nội dung đó thay thế shell skill này; yêu cầu
   và file người dùng gửi áp dụng nguyên cho nó.
 - Không bao giờ ghi file vào `$REPO` (code viết thêm cho người dùng để trong workspace `custom/`).
-- Lệnh lấy repo (clone/fetch) lỗi → retry đúng 1 lần. Vẫn lỗi (mạng, quyền, thiếu `add_repo`) → báo người
-  dùng một dòng kèm lỗi, dừng. Không tự dựng
-  video theo trí nhớ.
+- Không lấy được repo (xem bước 1) → báo người dùng một dòng kèm lỗi, dừng. Không tự dựng video theo trí nhớ.
 
 Chỉ cần cập nhật shell skill khi đổi `description` hoặc cách lấy repo. Shell skill lưu ở `shells/nve/SKILL.md` trong repo.

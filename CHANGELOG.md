@@ -2,6 +2,18 @@
 
 Versions go up by 0.1 per release (0.3 → 0.4 → 0.5…) unless a number is chosen. (0.2 was skipped.) `stable` always points at the latest release tag.
 
+## 0.7.1 — 2026-11-14
+- Install prompt (claude.ai): fetch the shell skill with `git clone` first, `add_repo` only as a fallback.
+
+## 0.7.0 — 2026-11-14
+- claude.ai Free: shell skill clones the repo with plain `git clone` first (no `add_repo` on Free), `add_repo` only after two failed clones; claude.ai is recognised by `/mnt/user-data` or `/home/claude`.
+- `nve doctor` knows when captions are impossible (Free: no domain can be added): one line "paste the spoken words to make captions" instead of the allowlist steps; Standard adds a gentle hint that Claude Pro gets automatic captions. Install docs: nve needs a paid Claude plan (Pro or higher).
+- Whisper (Node) is skipped when huggingface.co is blocked; every `npx` runs from a neutral folder with `npm_config_prefix` from `~/.npmrc` (fixes "prefix cannot be changed from project config").
+- faster-whisper gets a float32 16 kHz array decoded by nve (newer PyAV broke `decode_audio`).
+- Resources catalog `resources.json` + `nve.resources`: large files (models first) pinned by repo folder, version and SHA-256 of every file, fetched with a sparse partial git clone of `nhathm/nve-resources` (only github.com needed; ~8 s for whisper-small on a claude.ai sandbox), parts joined and cached in `~/.cache/nve/<id>/<version>`.
+- New **newbie** edition (`build/export_newbie.py`, `EDITION.json` `"resources": ["whisper-small"]`): when Hugging Face is blocked, whisper-small (CTranslate2 int8) comes from nve-resources.
+- Exports keep each public repo's own README / LICENSE.
+
 ## 0.6.0 — 2026-11-13
 - Claude Code: the folder Claude Code is opened in becomes the workspace. Install = open Claude Code in an empty folder, `/plugin marketplace add` + `/plugin install`, new session, `/nve`: the skill runs `nve-setup` on first use (home folder → `~/nve-studio`; inside an existing workspace → that one).
 - `nve init` remembers the workspace (`~/.nve/workspace`), so `/nve` still finds it from another folder.

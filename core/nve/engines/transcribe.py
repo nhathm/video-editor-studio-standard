@@ -12,7 +12,7 @@ from pathlib import Path
 from nve.engines import Ctx, Engine, EngineFailed, EngineUnavailable
 from nve.env import HYPERFRAMES_VERSION, get_key
 from nve.paths import NveError
-from nve.util import retry_once, run
+from nve.util import log, retry_once, run
 
 SCRIBE_URL = "https://api.elevenlabs.io/v1/speech-to-text"
 ALLOWLIST_HINT = ("on claude.ai, add api.elevenlabs.io, huggingface.co, *.huggingface.co, *.hf.co to "
@@ -79,19 +79,23 @@ class Whisper(Engine):
     id, capability = "whisper", "transcribe"
 
     def available(self, ctx: Ctx) -> tuple[bool, str]:
-        return (True, "") if ctx.env.get("node") else (False, "node >= 22 not found")
+        if not ctx.env.get("node"):
+            return False, "node >= 22 not found"
+        if (ctx.env.get("network") or {}).get("huggingface.co") is False:
+            return False, "whisper model download blocked (huggingface.co)"
+        return True, ""
 
     def run(self, job: dict, ctx: Ctx) -> dict:
+        from nve.env import npx
         node = ctx.env["node"]
         work = Path(job["work"])
         audio = extract_audio(Path(job["src"]), work / f"{Path(job['out']).stem}.wav")
         lang = job.get("language")
         model = "small.en" if lang in (None, "en") else "small"
-        cmd = ["npx", "-y", f"hyperframes@{HYPERFRAMES_VERSION}", "transcribe", str(audio), "--json", "--model", model]
+        args = ["transcribe", str(audio.resolve()), "--json", "--model", model]
         if lang and lang != "en":
-            cmd += ["--language", lang]
-        env = {**os.environ, "PATH": node["bin_dir"] + os.pathsep + os.environ.get("PATH", "")}
-        retry_once(lambda: run(cmd, env=env, timeout=1800), "whisper (npx hyperframes transcribe)",
+            args += ["--language", lang]
+        retry_once(lambda: npx(node, args, timeout=1800, check=True), "whisper (npx hyperframes transcribe)",
                    on=(NveError,))  # failed command; a 30-min timeout is not retried
         tj = audio.parent / "transcript.json"
         if not tj.exists():
@@ -120,6 +124,9 @@ class FasterWhisper(Engine):
 
     def available(self, ctx: Ctx) -> tuple[bool, str]:
         # Only a check: never installs here (`nve engines` / doctor must not change the venv).
+        blocked, _ = self._model_source(ctx)
+        if blocked:
+            return False, blocked
         try:
             import faster_whisper  # noqa: F401
             return True, ""
@@ -128,6 +135,19 @@ class FasterWhisper(Engine):
         if os.environ.get("NVE_NO_PIP") == "1":
             return False, "faster-whisper not installed"
         return True, "not installed yet: pip-installed on first use"
+
+    @staticmethod
+    def _model_source(ctx: Ctx) -> tuple[str | None, bool]:
+        """(why unavailable, may use nve-resources). The model comes from Hugging Face or, when the edition
+        lists it in `resources` (newbie), from the nve-resources git repo (see nve.resources)."""
+        from nve import resources
+        net = ctx.env.get("network") or {}
+        mirror = "whisper-small" in ((ctx.env.get("edition") or {}).get("resources") or [])
+        if os.environ.get("NVE_WHISPER_MODEL") or resources.is_cached("whisper-small"):
+            return None, mirror
+        if net.get("huggingface.co") is False and not (mirror and net.get("github.com", True)):
+            return "whisper model download blocked (huggingface.co)", mirror
+        return None, mirror
 
     @staticmethod
     def _install() -> None:
@@ -157,13 +177,10 @@ class FasterWhisper(Engine):
                 raise EngineUnavailable("faster-whisper import failed after install") from e
         audio = extract_audio(Path(job["src"]), Path(job["work"]) / f"{Path(job['out']).stem}.wav")
         lang = job.get("language")
-        name = os.environ.get("NVE_WHISPER_MODEL", "small")
-        try:
-            model = retry_once(lambda: WhisperModel(name, device="cpu", compute_type="int8"),
-                               "whisper model download (Hugging Face)")
-        except Exception as e:
-            raise EngineUnavailable(f"model download failed twice ({str(e)[:120]}; {ALLOWLIST_HINT})") from e
-        segs, info = model.transcribe(str(audio), language=lang, word_timestamps=True, vad_filter=False)
+        model = self._load_model(WhisperModel, ctx)
+        # Decode ourselves (16 kHz mono float32): faster_whisper.decode_audio breaks with newer PyAV
+        # ("open() got an unexpected keyword argument 'metadata_errors'").
+        segs, info = model.transcribe(wav_float32(audio), language=lang, word_timestamps=True, vad_filter=False)
         out, prev = [], None
         for seg in segs:
             for w in seg.words or []:
@@ -177,6 +194,45 @@ class FasterWhisper(Engine):
         Path(job["out"]).write_text(json.dumps({"engine": "faster-whisper", "language_code": lang or info.language,
                                                 "words": out}, ensure_ascii=False, indent=1))
         return {"out": job["out"], "words": sum(1 for x in out if x["type"] == "word")}
+
+
+    def _load_model(self, WhisperModel, ctx: Ctx):
+        from nve import resources
+        load = lambda src: WhisperModel(src, device="cpu", compute_type="int8")  # noqa: E731
+        _, mirror = self._model_source(ctx)
+        name = os.environ.get("NVE_WHISPER_MODEL")
+        if name:
+            return load(name)
+        if resources.is_cached("whisper-small"):
+            return load(str(resources.cache_dir("whisper-small")))
+        hf_blocked = (ctx.env.get("network") or {}).get("huggingface.co") is False
+        if not hf_blocked:
+            try:
+                return retry_once(lambda: load("small"), "whisper model download (Hugging Face)")
+            except Exception as e:  # noqa: BLE001
+                if not mirror:
+                    raise EngineUnavailable(f"model download failed twice ({str(e)[:120]}; {ALLOWLIST_HINT})") from e
+                log(f"Hugging Face download failed ({str(e)[:80]}); using nve-resources on GitHub")
+        if not mirror:
+            raise EngineUnavailable("whisper model download blocked (huggingface.co)")
+        try:
+            d = resources.fetch("whisper-small")
+        except NveError as e:
+            raise EngineUnavailable(str(e)) from e
+        os.environ["NVE_WHISPER_MODEL"] = str(d)
+        return load(str(d))
+
+
+def wav_float32(path: Path):
+    """16-bit PCM WAV (as extract_audio writes it: mono 16 kHz) -> float32 numpy array in [-1, 1]."""
+    import wave
+
+    import numpy as np
+    with wave.open(str(path), "rb") as w:
+        if w.getsampwidth() != 2 or w.getframerate() != 16000 or w.getnchannels() != 1:
+            raise EngineFailed("expected 16 kHz mono 16-bit WAV")
+        data = w.readframes(w.getnframes())
+    return np.frombuffer(data, dtype="<i2").astype(np.float32) / 32768.0
 
 
 ENGINES = [Scribe, Whisper, FasterWhisper]
