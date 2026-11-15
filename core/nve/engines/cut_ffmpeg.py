@@ -46,12 +46,13 @@ class FfmpegCut(Engine):
             fit += ",hflip"
         vlist, alist = [], []
         for i, s in enumerate(job["segments"]):
-            n, d, sp = s["frames"], s["out_dur"], s["speed"]
+            # photos that cross-fade into a neighbour are held longer on that side (half the crossing each)
+            n, d, sp = s["frames"] + s.get("pad_in", 0) + s.get("pad_out", 0), s["out_dur"], s["speed"]
             src_d = s["out"] - s["in"]
             vo, ao = work / f"v{i:03d}.mp4", work / f"a{i:03d}.wav"
             pre = TONEMAP if s.get("hdr") else ""
             if s["kind"] == "image":
-                inp = ["-loop", "1", "-t", f"{d + 0.2:.3f}", "-i", s["path"]]
+                inp = ["-loop", "1", "-t", f"{n / FPS + 0.2:.3f}", "-i", s["path"]]
                 vf = f"{fit},fps={FPS}"
             else:
                 inp = ["-ss", f"{s['in']:.3f}", "-t", f"{src_d + 0.15:.3f}", "-i", s["path"]]
@@ -87,7 +88,31 @@ class FfmpegCut(Engine):
         anorm = [] if job.get("no_loudnorm") else ["-af", "loudnorm=I=-14:TP=-1.5:LRA=11"]
         run(["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(work / "a.txt"), *anorm, "-ar", "48000", str(a_all)])
         out = Path(job["out"])
-        run(["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(work / "v.txt"), "-i", str(a_all),
+        xf = {x["i"]: x for x in job.get("xfades") or []}
+        if xf:  # photo crossings: one filter graph (concat where there is none), re-encoded once
+            inputs, fc, cur, length = [], [], "[0:v]", job["segments"][0]["frames"] + job["segments"][0].get("pad_in", 0) + job["segments"][0].get("pad_out", 0)
+            for k, v in enumerate(vlist):   # one timebase for all, or xfade refuses to join concat output and a segment
+                inputs += ["-i", v]
+                fc.append(f"[{k}:v]setpts=PTS-STARTPTS,fps={FPS},settb=AVTB[s{k}]")
+            cur = "[s0]"
+            for i in range(1, len(vlist)):
+                s = job["segments"][i]
+                n = s["frames"] + s.get("pad_in", 0) + s.get("pad_out", 0)
+                if i in xf:
+                    k = xf[i]["frames"]
+                    fc.append(f"{cur}[s{i}]xfade=transition={xf[i]['xfade']}:duration={k / FPS:.4f}:offset={(length - k) / FPS:.4f}[x{i}]")
+                    length += n - k
+                else:
+                    fc.append(f"{cur}[s{i}]concat=n=2:v=1:a=0[x{i}]")
+                    length += n
+                cur = f"[x{i}]"
+            vx = work / "v_x.mp4"
+            run(["ffmpeg", "-v", "error", "-y", *inputs, "-filter_complex", ";".join(fc), "-map", cur, "-frames:v", str(length),
+                 "-c:v", "libx264", "-crf", crf, "-preset", preset, "-pix_fmt", "yuv420p", "-r", str(FPS), str(vx)], cwd=work)
+            vin = ["-i", str(vx)]
+        else:
+            vin = ["-f", "concat", "-safe", "0", "-i", str(work / "v.txt")]
+        run(["ffmpeg", "-v", "error", "-y", *vin, "-i", str(a_all),
              "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest",
              "-movflags", "+faststart", str(out)])
         return {"out": str(out), "segments": len(vlist), "graded_with": "numpy" if grade else "ffmpeg"}

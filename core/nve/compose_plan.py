@@ -22,18 +22,207 @@ def _props(block: dict, given: dict) -> dict:
     return out
 
 
-def caption_groups(words: list[dict], gmin: int, gmax: int, end: float, keywords: set[str]) -> list[dict]:
-    groups, cur = [], []
-    for i, w in enumerate(words):
-        cur.append(w)
-        last = i + 1 == len(words)
-        punct = w["text"][-1:] in ".,:!?;"
-        gap_next = not last and words[i + 1]["start"] - w["end"] > 0.6
-        # whisper often omits the full stop but keeps the capital letter of the next sentence
-        new_sentence = not last and words[i + 1]["text"][:1].isupper() and len(cur) >= 2
-        if last or gap_next or new_sentence or len(cur) >= gmax or (punct and len(cur) >= min(gmin, 2)):
-            groups.append(cur)
-            cur = []
+# words a caption line should not end on: they lean on the next word (break before them instead)
+CONNECTORS = {"và", "của", "là", "thì", "mà", "những", "các", "một", "cho", "với", "để", "nhưng", "hay", "hoặc", "rất",
+              "từ", "khi", "vì", "nếu", "the", "a", "an", "to", "of", "and", "for", "with", "in", "on", "but", "or"}
+
+
+def rich(text: str) -> list[list[tuple[str, bool]]]:
+    """'BẠN ĐANG *UỐNG SAI*|TRÀ SỮA' -> lines of (piece, emphasised). '|' = new line, *...* = accent colour."""
+    out = []
+    for line in str(text).split("|"):
+        parts = line.split("*")
+        out.append([(t, k % 2 == 1) for k, t in enumerate(parts) if t])
+    return out
+
+
+def plain(text: str) -> str:
+    return str(text).replace("*", "")
+
+
+def font_path(family: str) -> Path | None:
+    """The heaviest static file of a pack family (what both engines draw titles with)."""
+    from nve.paths import INSTALL_ROOT
+    d = INSTALL_ROOT / "packs" / "fonts" / family.replace(" ", "")
+    for style in ("Black", "Bold"):
+        f = d / f"{family.replace(' ', '')}-{style}.ttf"
+        if f.exists():
+            return f
+    files = sorted(d.glob("*.ttf")) if d.is_dir() else []
+    return files[0] if files else None
+
+
+def win_ratio(ff: Path) -> float:
+    """(usWinAscent + usWinDescent) / unitsPerEm: libass treats a font size as this height, so an em of N px
+    needs size N * ratio. Read straight from the OS/2 and head tables (no fontTools in a bare sandbox)."""
+    import struct
+    try:
+        b = ff.read_bytes()
+        n = struct.unpack(">H", b[4:6])[0]
+        tables = {b[12 + 16 * i: 16 + 16 * i]: struct.unpack(">I", b[20 + 16 * i: 24 + 16 * i])[0] for i in range(n)}
+        upem = struct.unpack(">H", b[tables[b"head"] + 18: tables[b"head"] + 20])[0]
+        o = tables[b"OS/2"]
+        win_a, win_d = struct.unpack(">HH", b[o + 74: o + 78])
+        return (win_a + win_d) / upem if upem and win_a else 1.2
+    except (OSError, KeyError, struct.error):
+        return 1.2
+
+
+def measurer(family: str, px: int):
+    """(width_of(text) in px, ass_size): ASS sizes are line heights, so the size libass needs for an em of `px`."""
+    from PIL import ImageFont
+    ff = font_path(family)
+    if not ff:
+        f = ImageFont.load_default()
+        return (lambda t: f.getlength(t) * px / 10), int(px * 1.2)
+    f = ImageFont.truetype(str(ff), max(1, px))
+    try:
+        f.set_variation_by_axes([900])
+    except Exception:
+        pass
+    return (lambda t: f.getlength(t)), int(round(px * win_ratio(ff)))
+
+
+def fit_size(family: str, lines: list[str], max_w: float, max_px: int) -> int:
+    width_of, _ = measurer(family, 100)
+    widest = max((width_of(x) for x in lines), default=1) or 1
+    return max(12, min(max_px, int(max_w * 100 / widest)))
+
+
+# words that open a new clause: a good place to break BEFORE them
+OPENERS = {"và", "nhưng", "mà", "thì", "vì", "nên", "để", "nếu", "khi", "rồi", "còn", "hay", "hoặc", "tại", "bởi",
+           "and", "but", "so", "because", "if", "when", "then", "or"}
+
+
+def _key(t: str) -> str:
+    return t.lower().strip(".,:!?;…\"'()")
+
+
+def break_score(w: dict, nxt: dict) -> float:
+    """How good a caption break is between w and nxt (higher = a cleaner end of an idea)."""
+    t, gap = w["text"], nxt["start"] - w["end"]
+    sc = 0.0
+    if t[-1:] in ".!?…":
+        sc += 10
+    elif t[-1:] in ",:;":
+        sc += 6
+    sc += 10 if gap > 0.6 else 5 if gap >= 0.3 else 2 if gap >= 0.18 else 0
+    if nxt["text"][:1].isupper():   # whisper often drops the full stop but keeps the capital
+        sc += 3
+    if _key(nxt["text"]) in OPENERS:
+        sc += 2
+    if _key(t) in CONNECTORS:       # "uống trà với | đường" cuts an idea in half
+        sc -= 6
+    return sc
+
+
+def _split(seg: list[dict], scores: list[float], gmin: int, gmax: int) -> list[list[dict]]:
+    """Split one run (no hard break inside) into groups of <= gmax words, cutting where ideas end."""
+    n = len(seg)
+    if n <= gmax:
+        return [seg]
+    k = -(-n // gmax)
+    target = n / k
+    short = min(gmin, 2)
+    best = [0.0] + [float("inf")] * n
+    back = [0] * (n + 1)
+    for j in range(1, n + 1):
+        for i in range(max(0, j - gmax), j):
+            if best[i] == float("inf"):
+                continue
+            size = j - i
+            cost = best[i] + 0.6 * abs(size - target) + (8 if size < short else 0)
+            if j < n:
+                cost -= scores[j - 1]   # break after word j-1
+            if cost < best[j]:
+                best[j], back[j] = cost, i
+    out, j = [], n
+    while j > 0:
+        out.append(seg[back[j]:j])
+        j = back[j]
+    return out[::-1]
+
+
+PHRASE_MAX = 8   # a phrase Claude wrote stays whole up to this many words (it wraps to two lines)
+
+
+def phrase_breaks(words: list[dict], phrases: list[str]) -> set[int]:
+    """Indices i (break after words[i]) where the phrases Claude wrote end, aligned on the spoken words, so the
+    breaks survive edits to the cuts (words that were cut away are simply skipped)."""
+    return _align(words, phrases)[0]
+
+
+def _align(words: list[dict], phrases: list[str]) -> tuple[set[int], set[int]]:
+    """(group ends, line breaks): word indices to break after. '|' inside a phrase = line break there."""
+    from difflib import SequenceMatcher
+    toks, ends, brs = [], set(), set()
+    for ph in phrases:
+        n0 = len(toks)
+        for t in str(ph).replace("|", " | ").split():
+            if t == "|":
+                if len(toks) > n0:
+                    brs.add(len(toks) - 1)
+            elif _key(t):
+                toks.append(_key(t))
+        if len(toks) > n0:
+            ends.add(len(toks) - 1)
+    keys = [_key(w["text"]) for w in words]
+    out, lb = set(), set()
+    for blk in SequenceMatcher(None, toks, keys, autojunk=False).get_matching_blocks():
+        for k in range(blk.size):
+            if blk.a + k in ends:
+                out.add(blk.b + k)
+            if blk.a + k in brs:
+                lb.add(blk.b + k)
+    return out, lb
+
+
+def line_break(texts: list[str], width_of, max_w: float, scores: list[float]) -> int | None:
+    """Where to start the 2nd line of a caption that does not fit on one: the most even split, preferring good
+    breaks and never after a word that leans on the next. Returns the index of the last word of line 1."""
+    if len(texts) < 2:
+        return None
+    sp = width_of(" ")
+    ws = [width_of(t) for t in texts]
+    total = sum(ws) + sp * (len(ws) - 1)
+    if total <= max_w:
+        return None
+    best, best_cost, left = None, float("inf"), 0.0
+    for i in range(len(texts) - 1):
+        left += ws[i] + (sp if i else 0)
+        right = total - left - sp
+        cost = abs(left - right) / max(total, 1) * 10 - 0.5 * (scores[i] if i < len(scores) else 0)
+        if _key(texts[i]) in CONNECTORS:
+            cost += 6
+        if max(left, right) > max_w:
+            cost += 20
+        if cost < best_cost:
+            best, best_cost = i, cost
+    return best
+
+
+def caption_groups(words: list[dict], gmin: int, gmax: int, end: float, keywords: set[str],
+                   phrases: list[str] | None = None) -> list[dict]:
+    """Caption groups that are complete ideas. With `phrases` (style.caption.phrases, written by Claude from the
+    transcript), break exactly where they end. Otherwise (and inside anything left too long): always break at
+    sentence ends and long pauses, then pick the breaks with the best score (punctuation, pauses, a new clause),
+    never right after a word that leans on the next one."""
+    groups: list[list[dict]] = []
+    if words:
+        scores = [break_score(w, nx) for w, nx in zip(words, words[1:])]
+        cuts, brs = _align(words, phrases) if phrases else (set(), set())
+        hard = 10 if not cuts else 100     # Claude's phrases decide; only a real silence still breaks them
+        cap = max(gmax, PHRASE_MAX) if cuts else gmax
+        start = 0
+        for i in range(len(words)):
+            last = i + 1 == len(words)
+            silence = not last and words[i + 1]["start"] - words[i]["end"] > 1.0
+            if last or i in cuts or silence or scores[i] >= hard:
+                groups += _split(words[start:i + 1], scores[start:i], gmin, cap if cuts else gmax)
+                start = i + 1
+    else:
+        scores, brs = [], set()
+    index = {id(w): i for i, w in enumerate(words)}
     out = []
     for gi, g in enumerate(groups):
         st = max(0.0, g[0]["start"] - 0.05)
@@ -41,8 +230,22 @@ def caption_groups(words: list[dict], gmin: int, gmax: int, end: float, keywords
         en = min(nx, g[-1]["end"] + 0.45, end)
         out.append({"id": f"cg{gi}", "start": round(st, 3), "end": round(max(en, st + 0.2), 3),
                     "words": [{"text": w["text"].rstrip(".,:;"), "start": w["start"], "end": w["end"],
-                               "key": w["text"].lower().strip(".,:!?;") in keywords} for w in g]})
+                               "key": _key(w["text"]) in keywords, "br": index[id(w)] in brs and w is not g[-1]}
+                              for w in g],
+                    "scores": [scores[index[id(w)]] for w in g[:-1]]})
     return out
+
+
+def set_line_breaks(groups: list[dict], family: str, px: int, max_w: float) -> None:
+    """Groups too wide for one line get one explicit line break (unless Claude placed one with '|')."""
+    width_of, _ = measurer(family, px)
+    for g in groups:
+        ws = g["words"]
+        if any(w.get("br") for w in ws):
+            continue
+        k = line_break([w["text"] for w in ws], width_of, max_w, g.get("scores") or [])
+        if k is not None:
+            ws[k]["br"] = True
 
 
 def build(sb: dict, words: list[dict], cut_path: Path, duration: float, project_dir: Path, ws: Path | None,
@@ -52,8 +255,8 @@ def build(sb: dict, words: list[dict], cut_path: Path, duration: float, project_
     pal = {"ink": "#1F2A44", "accent": "#FFD84D", "text": "#FFFFFF", "spoken": "#9EE6FF", **st.get("palette", {})}
     font = {"title": "Montserrat", "caption": "Montserrat", **st.get("font", {})}
     plan: dict = {"W": W, "H": H, "fps": o["fps"], "duration": round(duration, 3), "video": str(cut_path),
-                  "palette": pal, "font": font, "captions": None, "stamps": [], "cards": [], "walls": [], "sfx": [], "bgm": None, "person": None, "background": None,
-                  "warnings": []}
+                  "palette": pal, "font": font, "captions": None, "stamps": [], "cards": [], "walls": [], "hooks": [], "frames": [],
+                  "transitions": [], "sfx": [], "bgm": None, "person": None, "background": None, "warnings": []}
 
     if person:
         from nve import background
@@ -71,8 +274,17 @@ def build(sb: dict, words: list[dict], cut_path: Path, duration: float, project_
         blk = _block(cap["block"], ws)
         p = _props(blk, {k: v for k, v in cap.items() if k != "block"})
         kw = {k.lower() for k in p.get("keywords") or []}
-        plan["captions"] = {"block": blk["id"], "top": int(H * p["top"]), "size": int(W * p["size"]),
-                            "groups": caption_groups(words, p["group_min"], p["group_max"], duration, kw)}
+        groups = caption_groups(words, p["group_min"], p["group_max"], duration, kw, cap.get("phrases"))
+        if p.get("uppercase"):
+            for g in groups:
+                for w in g["words"]:
+                    w["text"] = w["text"].upper()
+        variant = blk.get("variant", "pill")
+        side = (70 if variant == "pill" else 86) * W / 1080
+        pad = 28 * W / 1080 if variant == "pill" else 0
+        set_line_breaks(groups, font["caption"], int(W * p["size"]), (W - 2 * side - 2 * pad) * 0.97)
+        plan["captions"] = {"block": blk["id"], "variant": variant, "top": int(H * p["top"]),
+                            "size": int(W * p["size"]), "groups": groups}
 
     sfx_n = 0
     banned = set(st.get("ban_sfx") or [])  # the user's taste: never these sounds
@@ -111,6 +323,21 @@ def build(sb: dict, words: list[dict], cut_path: Path, duration: float, project_
         elif blk["id"].endswith("card.image"):
             item["img"] = str(assets.resolve(p["img"], project_dir, ws, tier))
             plan["cards"].append(item)
+        elif blk["id"].endswith("hook.title"):
+            item["marker"] = p.get("marker") or pal["accent"]
+            item["size"] = fit_size(font["title"], plain(p["text"]).split("|"), W * 0.88, int(W * float(p.get("size") or 0.095)))
+            plan["hooks"].append(item)
+        elif blk["id"].endswith("media.frame"):
+            item["src"] = str(assets.resolve(p["src"], project_dir, ws, tier))
+            item["is_video"] = Path(item["src"]).suffix.lower() in (".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi")
+            fw = int(W * min(1.0, max(0.2, float(p.get("width") or 0.8)))) // 2 * 2
+            try:
+                aw, ah = (float(x) for x in str(p.get("aspect") or "4:3").split(":"))
+            except ValueError:
+                aw, ah = 4.0, 3.0
+            item.update({"w": fw, "h": int(fw * ah / aw) // 2 * 2, "radius": int(W * float(p.get("radius") or 0.045)),
+                         "in": float(p.get("in") or 0)})
+            plan["frames"].append(item)
         elif blk["id"].endswith("media.wall"):
             item["img"] = str(assets.resolve(p["img"], project_dir, ws, tier))
             fx, fy = (list(p.get("focus") or [0.5, 0.5]) + [0.5, 0.5])[:2]
@@ -136,6 +363,18 @@ def build(sb: dict, words: list[dict], cut_path: Path, duration: float, project_
         if 0 <= b["start"] - a["end"] < 0.15:
             a["end"] = b["start"]
             a["cut_out"] = b["cut_in"] = True
+
+    from nve import timeline, transitions
+    segs = timeline.segments(sb["tracks"]["video"], o.get("speed", 1.0), o["fps"]) if sb["tracks"].get("video") else []
+    trs, tw = transitions.resolve(sb, segs)
+    plan["warnings"] += tw
+    for t in trs:
+        if t["at"] >= duration:
+            continue
+        if t["family"] == "cut":
+            plan["transitions"].append({"at": t["at"], "type": t["type"], "duration": t["duration"]})
+        for d in t["sfx"]:
+            add_sfx(d["asset"], t["at"] + d.get("at", 0), d.get("volume", 0.3), d.get("max"))
 
     for a in sb["tracks"].get("audio", []):
         if a["kind"] == "bgm":

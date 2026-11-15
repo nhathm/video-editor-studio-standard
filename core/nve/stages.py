@@ -116,7 +116,8 @@ def detect_greenscreen(path: Path, info: dict) -> dict:
     ratios, cols = [], []
     for k, t in enumerate(times):
         p = tmp / f"{path.stem}_{k}.png"
-        run(["ffmpeg", "-v", "error", "-y", "-ss", f"{t:.2f}", "-i", str(path), "-frames:v", "1", "-vf", "scale=270:-2", str(p)])
+        seek = [] if info["kind"] == "image" else ["-ss", f"{t:.2f}"]   # ffmpeg 7 returns no frame for -ss 0 on a still
+        run(["ffmpeg", "-v", "error", "-y", *seek, "-i", str(path), "-frames:v", "1", "-vf", "scale=270:-2", str(p)])
         a = np.asarray(Image.open(p).convert("RGB")).astype(np.int16)
         h, w = a.shape[:2]
         border = np.concatenate([a[: h // 6].reshape(-1, 3), a[:, : w // 8].reshape(-1, 3), a[:, -w // 8:].reshape(-1, 3)])
@@ -390,8 +391,31 @@ def refresh(prj: Project, ctx: Ctx) -> dict:
     prj.p("storyboard.md").write_text(SB.to_markdown(prj.path, sb, LABELS_VI), encoding="utf-8")
     o = sb["output"]
     dur = timeline.total_duration(sb["tracks"]["video"], o.get("speed", 1.0), o["fps"])
+    lines = caption_lines(sb, words, dur, ctx)
+    if lines:
+        with prj.p("storyboard.md").open("a", encoding="utf-8") as f:
+            f.write("\n## Caption lines\n\n" + "\n".join(f"{k + 1}. {x}" for k, x in enumerate(lines)) + "\n")
     return {"duration": dur, "words": len(words), "overlays": len(sb["tracks"].get("overlay", [])),
-            "taste_warnings": taste_warnings(sb, dur, ctx)}
+            "caption_lines": lines, "lint": SB.lint(sb, dur), "taste_warnings": taste_warnings(sb, dur, ctx)}
+
+
+def caption_lines(sb: dict, words: list[dict], dur: float, ctx: Ctx) -> list[str]:
+    """The caption groups as they will be shown, so Claude (and the user at G1) can check every line is a whole idea."""
+    cap = (sb.get("style") or {}).get("caption") or {}
+    if not words or cap.get("block") in (None, "none"):
+        return []
+    try:
+        blk = registry.resolve(cap["block"], "block", ctx.workspace, ctx.env.get("edition"))
+    except NveError:
+        return []
+    p = compose_plan._props(blk, {k: v for k, v in cap.items() if k != "block"})
+    gs = compose_plan.caption_groups(words, p["group_min"], p["group_max"], dur, set(), cap.get("phrases"))
+    W = sb["output"]["width"]
+    variant = blk.get("variant", "pill")
+    side, pad = (70 if variant == "pill" else 86) * W / 1080, (28 * W / 1080 if variant == "pill" else 0)
+    font = {"caption": "Montserrat", **((sb.get("style") or {}).get("font") or {})}["caption"]
+    compose_plan.set_line_breaks(gs, font, int(W * p["size"]), (W - 2 * side - 2 * pad) * 0.97)
+    return [" ".join(w["text"] + (" /" if w.get("br") else "") for w in g["words"]) for g in gs]
 
 
 def taste_warnings(sb: dict, duration: float, ctx: Ctx) -> list[str]:
@@ -405,11 +429,21 @@ def taste_warnings(sb: dict, duration: float, ctx: Ctx) -> list[str]:
 
 
 # ───────────────────────── S5-S8 cut + compose ─────────────────────────
-def _segments(prj: Project, sb: dict) -> list[dict]:
+def _segments(prj: Project, sb: dict, xfades: list | None = None) -> list[dict]:
     o = sb["output"]
     infos = {s["id"]: s for s in json.loads(prj.p("analysis", "ingest.json").read_text())["sources"]}
     srcs = {s["id"]: s for s in sb["sources"]}
     segs = timeline.segments(sb["tracks"]["video"], o.get("speed", 1.0), o["fps"])
+    from nve import transitions
+    fps = o["fps"]
+    for t in transitions.resolve(sb, segs)[0]:
+        if t["family"] != "xfade":
+            continue
+        k = max(2, int(round(t["duration"] * fps / 2)) * 2)   # even frame count: half on each side of the cut
+        segs[t["i"] - 1]["pad_out"] = segs[t["i"] - 1].get("pad_out", 0) + k // 2
+        segs[t["i"]]["pad_in"] = segs[t["i"]].get("pad_in", 0) + k // 2
+        if xfades is not None:
+            xfades.append({"i": t["i"], "frames": k, "xfade": t["xfade"]})
     for s in segs:
         info = infos.get(s["src"], {})
         muted = s.get("mute") or srcs[s["src"]].get("audio") == "mute"
@@ -423,7 +457,8 @@ def cut(prj: Project, ctx: Ctx, proxy: bool = False) -> dict:
     o, st = sb["output"], sb.get("style", {})
     W, H = (o["width"] // 2 // 2 * 2, o["height"] // 2 // 2 * 2) if proxy else (o["width"], o["height"])
     name = "proxy" if proxy else "cut"
-    job = {"segments": _segments(prj, sb), "width": W, "height": H, "fps": o["fps"], "look": st.get("look", "none"),
+    xfades: list = []
+    job = {"segments": _segments(prj, sb, xfades), "xfades": xfades, "width": W, "height": H, "fps": o["fps"], "look": st.get("look", "none"),
            "skin": bool(st.get("skin")), "proxy": proxy, "work": str(prj.p("work", f"segs_{name}")),
            "out": str(prj.p("work", f"{name}.mp4"))}
     job["flip"] = bool(o.get("flip"))
@@ -511,7 +546,8 @@ def _cover_plan(plan: dict, cover: dict, ws: Path | None) -> dict:
     from nve import assets
     p = copy.deepcopy(plan)
     t = float(cover.get("at", 0.5))
-    p.update({"captions": None, "cards": [], "walls": [], "sfx": [], "bgm": None, "warnings": []})
+    p.update({"captions": None, "cards": [], "walls": [], "hooks": [], "frames": [], "transitions": [], "sfx": [], "bgm": None,
+              "warnings": []})
     emoji = []
     for cp in ([cover["emoji"]] if isinstance(cover.get("emoji"), str) else cover.get("emoji", [])):
         try:

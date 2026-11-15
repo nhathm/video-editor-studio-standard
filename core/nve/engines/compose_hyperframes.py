@@ -12,6 +12,7 @@ from pathlib import Path
 from nve.engines import Ctx, Engine, EngineFailed
 from nve.env import HYPERFRAMES_VERSION
 from nve.paths import INSTALL_ROOT
+from nve.compose_plan import plain, rich
 from nve.util import duration, run
 
 GSAP = "https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"
@@ -107,7 +108,7 @@ def write_project(plan: dict, motion: Path) -> None:
         J.append(f'tl.to("#cd{i}-i", {{ opacity: 0, scale: 0.6, y: -40, duration: 0.22, ease: "power2.in" }}, {en - 0.22:.3f});')
     for stp in plan["stamps"]:
         i, st, en = stp["i"], stp["start"], stp["end"]
-        lines = str(stp["props"]["text"]).split("|")
+        lines = plain(stp["props"]["text"]).split("|")
         longest = max(len(x) for x in lines)
         fs = int(min((100 if len(lines) > 1 else 112) * s * float(stp["props"].get("scale") or 1), 1450 * s / max(longest, 1)))
         emo = ""
@@ -117,14 +118,41 @@ def write_project(plan: dict, motion: Path) -> None:
             LOT[f"st{i}-e{k}"] = dst
             emo += f'<span class="lot"><i id="st{i}-e{k}" class="lotin"></i></span>'
         alt = stp["props"].get("alt")
-        txt = "".join(f'<div class="sl{" alt" if alt and li == len(lines) - 1 else ""}" style="font-size:{fs}px;">{html.escape(x)}</div>'
-                      for li, x in enumerate(lines))
+        txt = "".join(f'<div class="sl{" alt" if alt and li == len(lines) - 1 else ""}" style="font-size:{fs}px;">'
+                      + "".join(f'<span class="em">{html.escape(t)}</span>' if em else html.escape(t) for t, em in parts) + "</div>"
+                      for li, parts in enumerate(rich(stp["props"]["text"])))
         Hh.append(f'    <div id="st{i}" class="clip stw" data-start="{st:.3f}" data-duration="{en - st:.3f}" style="top:{stp["top"]}px">'
                   f'<div id="st{i}-m" class="emr">{emo}</div><div id="st{i}-t" class="stt">{txt}</div></div>')
         if emo:
             J.append(f'tl.fromTo("#st{i}-m", {{ opacity: 0, scale: 0.2, y: 40 }}, {{ opacity: 1, scale: 1, y: 0, duration: 0.4, ease: "back.out(2.4)" }}, {st:.3f});')
         J.append(f'tl.fromTo("#st{i}-t", {{ opacity: 0, scale: 2.3, rotation: -8 }}, {{ opacity: 1, scale: 1, rotation: -3, duration: 0.24, ease: "power4.in" }}, {st + 0.08:.3f});')
         J.append(f'tl.to("#st{i}", {{ opacity: 0, y: -30, duration: 0.18, ease: "power2.in" }}, {en - 0.18:.3f});')
+    for hk in plan.get("hooks", []):
+        i, st, en = hk["i"], hk["start"], hk["end"]
+        lines = rich(hk["props"]["text"])
+        fs = hk["size"]
+        body, words, k = [], 0, 0
+        for ln in lines:
+            row = []
+            for t, em in ln:
+                ws = [w for w in t.split(" ") if w]
+                spans = " ".join(f'<span id="hk{i}-w{words + n}" class="hw">{html.escape(w)}</span>' for n, w in enumerate(ws))
+                words += len(ws)
+                if em:
+                    row.append(f'<span class="hkm"><i id="hk{i}-m{k}" class="mk" style="background:{html.escape(hk["marker"])}"></i>'
+                               f'<span id="hk{i}-t{k}" class="hkt">{spans}</span></span>')
+                    k += 1
+                elif spans:
+                    row.append(spans)
+            body.append(f'<div class="hl" style="font-size:{fs}px">{" ".join(row)}</div>')
+        Hh.append(f'    <div id="hk{i}" class="clip hkw" data-start="{st:.3f}" data-duration="{en - st:.3f}" style="top:{hk["top"]}px">{"".join(body)}</div>')
+        for n in range(words):
+            J.append(f'tl.fromTo("#hk{i}-w{n}", {{ opacity: 0, y: {int(0.4 * fs)} }}, {{ opacity: 1, y: 0, duration: 0.22, ease: "back.out(2)" }}, {st + 0.06 * n:.3f});')
+        t0 = st + 0.06 * words + 0.12
+        for m in range(k):
+            J.append(f'tl.fromTo("#hk{i}-m{m}", {{ scaleX: 0, rotation: -1.5 }}, {{ scaleX: 1, rotation: -1.5, duration: 0.3, ease: "power3.out" }}, {t0 + 0.14 * m:.3f});')
+            J.append(f'tl.fromTo("#hk{i}-t{m}", {{ color: "{TXT}" }}, {{ color: "{INK}", duration: 0.12 }}, {t0 + 0.14 * m + 0.08:.3f});')
+        J.append(f'tl.to("#hk{i}", {{ opacity: 0, y: -24, duration: 0.18, ease: "power2.in" }}, {max(st + 0.3, en - 0.18):.3f});')
     lottie_js = "    window.__hfLottie = window.__hfLottie || [];\n"
     for el, path in LOT.items():
         lottie_js += (f'    window.__hfLottie.push(lottie.loadAnimation({{ container: document.getElementById("{el}"), renderer: "svg", '
@@ -149,6 +177,13 @@ def write_project(plan: dict, motion: Path) -> None:
     .stt {{ display: flex; flex-direction: column; align-items: center; }}
     .sl {{ font-weight: 900; line-height: 1.28; color: {TXT}; -webkit-text-stroke: {max(4, int(13 * s))}px {INK}; paint-order: stroke fill; text-shadow: 0 {int(11 * s)}px 0 {ACC}, 0 {int(22 * s)}px {int(34 * s)}px rgba(0,0,0,.3); white-space: nowrap; }}
     .sl.alt {{ color: {ACC}; text-shadow: 0 {int(11 * s)}px 0 {INK}, 0 {int(22 * s)}px {int(34 * s)}px rgba(0,0,0,.3); }}
+    .sl .em {{ color: {ACC}; }} .sl.alt .em {{ color: {TXT}; }}
+    .hkw {{ position: absolute; left: {int(40 * s)}px; right: {int(40 * s)}px; display: flex; flex-direction: column; align-items: center; gap: {int(6 * s)}px; }}
+    .hl {{ font-weight: 900; line-height: 1.22; color: {TXT}; text-align: center; white-space: nowrap; -webkit-text-stroke: {max(3, int(10 * s))}px {INK}; paint-order: stroke fill; text-shadow: 0 {int(8 * s)}px {int(24 * s)}px rgba(0,0,0,.45); }}
+    .hw {{ display: inline-block; }}
+    .hkm {{ position: relative; display: inline-block; padding: 0 {int(14 * s)}px; }}
+    .mk {{ position: absolute; left: 0; right: 0; top: 8%; bottom: 4%; border-radius: {int(14 * s)}px; transform-origin: 0 50%; }}
+    .hkt {{ position: relative; -webkit-text-stroke: 0; text-shadow: none; }}
   </style>
   <div id="root" data-composition-id="graphics" data-width="{W}" data-height="{H}" data-layout-allow-overlap>
 {chr(10).join(Hh)}
@@ -162,27 +197,59 @@ def write_project(plan: dict, motion: Path) -> None:
 </template>
 """)
 
-    # ── captions ──
+    # ── captions: pill (karaoke on a dark pill), outline, box (current word in a colour box), pop (big 1-3 words) ──
     cap = plan["captions"]
+    var = (cap or {}).get("variant", "pill")
     CH, CJ = [], []
     if cap:
         for g in cap["groups"]:
             gid, st, en = g["id"], g["start"], g["end"]
-            sp = " ".join(f'<span id="{gid}-w{wi}" class="cw">{html.escape(w["text"])}</span>' for wi, w in enumerate(g["words"]))
+            sp = " ".join(f'<span id="{gid}-w{wi}" class="cw">{html.escape(w["text"])}</span>' + ("<br>" if w.get("br") else "")
+                          for wi, w in enumerate(g["words"]))
             CH.append(f'    <div id="{gid}" class="clip cgp" data-start="{st:.3f}" data-duration="{en - st:.3f}"><div id="{gid}-i" class="cgi">{sp}</div></div>')
-            CJ.append(f'tl.fromTo("#{gid}-i", {{ opacity: 0, scale: 0.85 }}, {{ opacity: 1, scale: 1, duration: 0.14, ease: "back.out(2)" }}, {st:.3f});')
-            for wi, w in enumerate(g["words"]):
-                CJ.append(f'tl.fromTo("#{gid}-w{wi}", {{ color: "{TXT}" }}, {{ color: "{ACC if w["key"] else pal["spoken"]}", duration: 0.06 }}, {w["start"]:.3f});')
+            if var == "pop":
+                CJ.append(f'tl.fromTo("#{gid}-i", {{ opacity: 0, scale: 0.55, y: {int(20 * s)} }}, {{ opacity: 1, scale: 1, y: 0, duration: 0.2, ease: "back.out(3)" }}, {st:.3f});')
+            else:
+                CJ.append(f'tl.fromTo("#{gid}-i", {{ opacity: 0, scale: 0.85 }}, {{ opacity: 1, scale: 1, duration: 0.14, ease: "back.out(2)" }}, {st:.3f});')
+            ws = g["words"]
+            for wi, w in enumerate(ws):
+                sel, t0 = f"#{gid}-w{wi}", w["start"]
+                t1 = ws[wi + 1]["start"] if wi + 1 < len(ws) else en
+                if var == "pill":
+                    CJ.append(f'tl.fromTo("{sel}", {{ color: "{TXT}" }}, {{ color: "{ACC if w["key"] else pal["spoken"]}", duration: 0.06 }}, {t0:.3f});')
+                elif var == "box":
+                    CJ.append(f'tl.set("{sel}", {{ backgroundColor: "{ACC}", color: "{INK}", webkitTextStrokeColor: "{ACC}" }}, {t0:.3f});')
+                    if t1 < en or not w["key"]:
+                        CJ.append(f'tl.set("{sel}", {{ backgroundColor: "rgba(0,0,0,0)", color: "{ACC if w["key"] else TXT}", webkitTextStrokeColor: "{INK}" }}, {max(t0 + 0.05, t1):.3f});')
+                else:
+                    CJ.append(f'tl.set("{sel}", {{ color: "{ACC}" }}, {t0:.3f});')
+                    if not w["key"]:
+                        CJ.append(f'tl.set("{sel}", {{ color: "{TXT}" }}, {max(t0 + 0.05, t1):.3f});')
                 if w["key"]:
-                    CJ.append(f'tl.fromTo("#{gid}-w{wi}", {{ scale: 1 }}, {{ scale: 1.15, duration: 0.09, ease: "power2.out", yoyo: true, repeat: 1 }}, {w["start"]:.3f});')
+                    CJ.append(f'tl.fromTo("{sel}", {{ scale: 1 }}, {{ scale: 1.15, duration: 0.09, ease: "power2.out", yoyo: true, repeat: 1 }}, {t0:.3f});')
             if en < END:
                 CJ.append(f'tl.to("#{gid}-i", {{ opacity: 0, duration: 0.08, ease: "power2.in" }}, {max(en - 0.08, st + 0.15):.3f});')
+    csz = cap["size"] if cap else 60
+    stroke = max(3, int(csz * 0.16))
+    cap_css = {
+        "pill": (f".cgi {{ background: {INK}e0; padding: {int(10 * s)}px {int(28 * s)}px {int(14 * s)}px; border-radius: {int(22 * s)}px; text-align: center; }}\n"
+                 f"    .cw {{ display: inline-block; color: {TXT}; }}"),
+        "outline": (f".cgi {{ text-align: center; }}\n"
+                    f"    .cw {{ display: inline-block; color: {TXT}; -webkit-text-stroke: {stroke}px {INK}; paint-order: stroke fill; "
+                    f"text-shadow: 0 {int(csz * 0.07)}px {int(csz * 0.2)}px rgba(0,0,0,.5); }}"),
+        "box": (f".cgi {{ text-align: center; }}\n"
+                f"    .cw {{ display: inline-block; color: {TXT}; padding: 0 {int(csz * 0.14)}px; margin: 0 -{int(csz * 0.06)}px; border-radius: {int(csz * 0.2)}px; "
+                f"-webkit-text-stroke: {max(2, stroke - 2)}px {INK}; paint-order: stroke fill; text-shadow: 0 {int(csz * 0.06)}px {int(csz * 0.18)}px rgba(0,0,0,.45); }}"),
+        "pop": (f".cgi {{ text-align: center; }}\n"
+                f"    .cw {{ display: inline-block; color: {TXT}; -webkit-text-stroke: {stroke}px {INK}; paint-order: stroke fill; "
+                f"text-shadow: 0 {int(csz * 0.08)}px 0 {INK}, 0 {int(csz * 0.12)}px {int(csz * 0.25)}px rgba(0,0,0,.45); }}"),
+    }[var if var in ("pill", "outline", "box", "pop") else "pill"]
+    side = int((70 if var == "pill" else 86) * s)
     (motion / "compositions/captions.html").write_text(f"""<template>
   <style>
     #root {{ position: absolute; inset: 0; }}
-    .cgp {{ position: absolute; left: {int(70 * s)}px; right: {int(70 * s)}px; top: {cap['top'] if cap else 0}px; display: flex; justify-content: center; font-family: "{font['caption']}", sans-serif; font-weight: 900; font-size: {cap['size'] if cap else 60}px; line-height: 1.2; }}
-    .cgi {{ background: {INK}e0; padding: {int(10 * s)}px {int(28 * s)}px {int(14 * s)}px; border-radius: {int(22 * s)}px; text-align: center; }}
-    .cw {{ display: inline-block; color: {TXT}; }}
+    .cgp {{ position: absolute; left: {side}px; right: {side}px; top: {cap['top'] if cap else 0}px; display: flex; justify-content: center; font-family: "{font['caption']}", sans-serif; font-weight: 900; font-size: {csz}px; line-height: {1.2 if var == "pill" else 1.14}; }}
+    {cap_css}
   </style>
   <div id="root" data-composition-id="captions" data-width="{W}" data-height="{H}">
 {chr(10).join(CH)}
@@ -247,6 +314,61 @@ def write_project(plan: dict, motion: Path) -> None:
     else:
         base = (f'      <video id="vid" class="clip" src="assets/cut.mp4" data-start="0" data-duration="{END}" data-track-index="1" '
                 f'data-has-audio="true" data-volume="1"></video>\n')
+    # B-roll in rounded frames (between the base video and the graphics)
+    frames_html, fjs = "", []
+    for f in plan.get("frames", []):
+        i, st, en, pr = f["i"], f["start"], f["end"], f["props"]
+        if f["is_video"]:
+            dst = A / "img" / f"frame{i}.mp4"
+            run(["ffmpeg", "-v", "error", "-y", "-ss", f"{f['in']:.3f}", "-t", f"{en - st + 0.1:.3f}", "-i", f["src"], "-an",
+                 "-vf", f"scale={f['w']}:{f['h']}:force_original_aspect_ratio=increase,crop={f['w']}:{f['h']},fps={plan['fps']},format=yuv420p",
+                 "-c:v", "libx264", "-crf", "18", "-preset", "veryfast", str(dst)])
+            media = (f'<video id="frv{i}" class="clip frm" src="assets/img/{dst.name}" data-start="{st:.3f}" data-duration="{en - st:.3f}" '
+                     f'data-track-index="{40 + i}" muted></video>')
+        else:
+            dst = A / "img" / f"frame{i}{Path(f['src']).suffix}"
+            shutil.copy2(f["src"], dst)
+            media = f'<img class="frm" src="assets/img/{dst.name}" alt="">'
+        border = f"border: {max(3, int(8 * s))}px solid {html.escape(pr['border'])};" if pr.get("border") else ""
+        frames_html += (f'      <div id="fr{i}" class="frw" style="left:{(W - f["w"]) // 2}px;top:{f["top"]}px;width:{f["w"]}px;height:{f["h"]}px;'
+                        f'border-radius:{f["radius"]}px;{border}">{media}</div>\n')
+        anim = pr.get("anim") or "pop"
+        if anim == "slide-up":
+            fjs.append(f'tl.fromTo("#fr{i}", {{ opacity: 0, y: {int(H * 0.25)} }}, {{ opacity: 1, y: 0, duration: 0.35, ease: "power3.out" }}, {st:.3f});')
+        elif anim == "fade":
+            fjs.append(f'tl.fromTo("#fr{i}", {{ opacity: 0 }}, {{ opacity: 1, duration: 0.25, ease: "none" }}, {st:.3f});')
+        else:
+            fjs.append(f'tl.fromTo("#fr{i}", {{ opacity: 0, scale: 0.55, rotation: -5 }}, {{ opacity: 1, scale: 1, rotation: -1.5, duration: 0.4, ease: "back.out(1.8)" }}, {st:.3f});')
+        fjs.append(f'tl.to("#fr{i}", {{ opacity: 0, scale: 0.85, duration: 0.2, ease: "power2.in" }}, {max(st + 0.3, en - 0.2):.3f});')
+    # transitions at cut points: the whole picture (#stage) moves, the cut itself stays where it is
+    tjs, flash = [], False
+    for t in plan.get("transitions", []):
+        at, d, ty = t["at"], t["duration"], t["type"]
+        if ty == "zoom-punch":
+            tjs.append(f'tl.to("#stage", {{ scale: 1.07, duration: 0.1, ease: "power2.in" }}, {max(0, at - 0.1):.3f});')
+            tjs.append(f'tl.fromTo("#stage", {{ scale: 1.18 }}, {{ scale: 1, duration: {d:.3f}, ease: "power3.out", immediateRender: false }}, {at:.3f});')
+        elif ty == "flash":
+            flash = True
+            tjs.append(f'tl.fromTo("#tflash", {{ opacity: 0 }}, {{ opacity: 0.9, duration: {d / 2:.3f}, ease: "power1.in" }}, {max(0, at - d / 2):.3f});')
+            tjs.append(f'tl.to("#tflash", {{ opacity: 0, duration: {d / 2:.3f}, ease: "power1.out" }}, {at:.3f});')
+        elif ty == "whip":
+            tjs.append(f'tl.to("#stage", {{ x: {-int(W * 0.1)}, scale: 1.25, filter: "blur(16px)", duration: {d / 2:.3f}, ease: "power2.in" }}, {max(0, at - d / 2):.3f});')
+            tjs.append(f'tl.fromTo("#stage", {{ x: {int(W * 0.1)}, scale: 1.25, filter: "blur(16px)" }}, {{ x: 0, scale: 1, filter: "blur(0px)", '
+                       f'duration: {d / 2:.3f}, ease: "power2.out", immediateRender: false }}, {at:.3f});')
+        elif ty == "glitch":
+            steps = [(-24, "hue-rotate(90deg) saturate(3)"), (18, "contrast(1.8) hue-rotate(-70deg)"), (-10, "invert(0.15) saturate(4)"),
+                     (28, "hue-rotate(160deg) contrast(1.5)"), (-14, "saturate(2.5)"), (0, "none")]
+            for k, (dx, flt) in enumerate(steps):
+                tjs.append(f'tl.set("#stage", {{ x: {int(dx * s)}, scale: {1.06 if dx else 1}, filter: "{flt}" }}, {max(0, at - d / 2 + k * d / len(steps)):.3f});')
+        elif ty == "shake":
+            amp = [26, -22, 18, -14, 10, -7, 4, -2, 0]
+            tjs.append(f'tl.set("#stage", {{ scale: 1.06 }}, {at:.3f});')
+            for k, a in enumerate(amp):
+                tjs.append(f'tl.to("#stage", {{ x: {int(a * s)}, y: {int(-a * 0.6 * s)}, rotation: {a * 0.04:.2f}, scale: {1.06 if a else 1}, '
+                           f'duration: {d / len(amp):.3f}, ease: "none" }}, {at + k * d / len(amp):.3f});')
+    if flash:
+        frames_html += '      <div id="tflash" style="position:absolute;inset:0;background:#fff;opacity:0;z-index:4;"></div>\n'
+    root_js += "".join("      " + x + "\n" for x in fjs + tjs)
     faces = _font_faces({font["title"], font["caption"]}, A)
     (motion / "index.html").write_text(f"""<!doctype html>
 <html lang="vi">
@@ -264,11 +386,16 @@ def write_project(plan: dict, motion: Path) -> None:
       {base_css}
       #graphics {{ position: absolute; inset: 0; z-index: 5; }}
       #captions {{ position: absolute; inset: 0; z-index: 6; }}
+      #stage {{ position: absolute; inset: 0; overflow: hidden; transform-origin: 50% 50%; }}
+      .frw {{ position: absolute; z-index: 4; overflow: hidden; opacity: 0; box-shadow: 0 {int(24 * s)}px {int(60 * s)}px rgba(0,0,0,.45); background: #000; }}
+      .frm {{ position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }}
     </style>
   </head>
   <body>
     <div id="root" data-composition-id="main" data-fps="{plan['fps']}" data-start="0" data-duration="{END}" data-width="{W}" data-height="{H}">
-{base}      <div id="graphics" data-composition-id="graphics" data-composition-src="compositions/graphics.html" data-start="0" data-duration="{END}" data-track-index="4" data-width="{W}" data-height="{H}"></div>
+      <div id="stage">
+{base}      </div>
+{frames_html}      <div id="graphics" data-composition-id="graphics" data-composition-src="compositions/graphics.html" data-start="0" data-duration="{END}" data-track-index="4" data-width="{W}" data-height="{H}"></div>
       <div id="captions" data-composition-id="captions" data-composition-src="compositions/captions.html" data-start="0" data-duration="{END}" data-track-index="5" data-width="{W}" data-height="{H}"></div>
 {bgm}{chr(10).join(audio)}
     </div>

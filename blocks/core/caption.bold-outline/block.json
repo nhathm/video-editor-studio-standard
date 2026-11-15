@@ -1,0 +1,45 @@
+{
+  "id": "core:caption.bold-outline",
+  "version": "1",
+  "kind": "caption",
+  "variant": "outline",
+  "label": {
+    "vi": "Chữ trắng viền đậm, từ đang nói đổi màu",
+    "en": "Bold outlined captions, current word highlighted"
+  },
+  "description": "No background: white heavy text with a thick dark outline and a soft shadow, 2-5 word groups on at most 2 lines; the word being spoken turns the accent colour, keywords stay accent with a small pop. The default caption look.",
+  "engines": [
+    "hyperframes",
+    "ass"
+  ],
+  "props": {
+    "group_min": {
+      "type": "integer",
+      "default": 2
+    },
+    "group_max": {
+      "type": "integer",
+      "default": 4
+    },
+    "keywords": {
+      "type": "array",
+      "default": [],
+      "doc": "words that stay in the accent colour (product names, numbers, the CTA name)"
+    },
+    "top": {
+      "type": "number",
+      "default": 0.68,
+      "doc": "top edge as a fraction of frame height; keep it above the app's buttons and description (<= 0.75 on TikTok/Reels)"
+    },
+    "size": {
+      "type": "number",
+      "default": 0.074,
+      "doc": "font size as a fraction of frame width"
+    },
+    "uppercase": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "default_sfx": []
+}

@@ -2,6 +2,53 @@
 
 Versions go up by 0.1 per release (0.3 → 0.4 → 0.5…) unless a number is chosen. (0.2 was skipped.) `stable` always points at the latest release tag.
 
+## 1.0.0 — 2026-11-16 · first official release
+
+nve 1.0 is the first release we call finished: an AI editor inside Claude that takes raw clips to a ready-to-post
+short video, with captions, a hook, motion graphics, transitions, music and a quality check, and that learns
+your taste as you correct it.
+
+### Captions
+- **New default look** `core:caption.bold-outline`: no background, white heavy words with a dark outline, the
+  word being spoken lights up in your accent colour, keywords stay coloured with a small pop.
+- Two more looks: `core:caption.word-box` (the spoken word sits in a colour box) and `core:caption.pop-word`
+  (very big, 1–3 words at a time, popping in). The dark karaoke pill stays as a choice.
+- **Whole ideas, never cut mid-phrase.** Claude writes the caption lines as complete ideas
+  (`style.caption.phrases`); nve aligns them on the speech, so they survive later cut changes, and lists them in
+  the storyboard for review. Without them, nve breaks at sentence ends, commas and pauses, before words like
+  "và / nhưng / để", and never after a word that leans on the next.
+- A word cut at the edge of a range is shown once, in the range that holds most of it.
+
+### Hook and graphics
+- **Hook title** `core:hook.title`: Claude looks for the hook sentence in the first 3 seconds and puts its
+  2–6 word essence on screen; words rise one by one, then a marker sweeps in behind the key words.
+- **One word in its own colour**: `*word*` in stamp, hook and cover text.
+- **B-roll in a rounded frame** `core:media.frame`: a video clip (muted) or photo with a border and shadow over
+  the talking video, popping or sliding in.
+
+### Transitions
+- Cut effects that keep the video length: zoom punch, white flash, whip pan, glitch, shake. Between two photos:
+  crossfade, slide left / up, zoom in, wipe, circle. Each comes with its own short sound.
+- Off unless you ask. For a photo slideshow Claude asks which one; no answer means a random pick that stays the
+  same if you render again. Jump cuts inside one clip stay clean cuts.
+
+### Colours and choices
+- `nve palette`: text colours from a reference picture, from a colour you name (made readable on video), or an
+  automatic accent that stands out from your footage.
+- Style questions come as buttons where the app has them.
+- `nve plan refresh` now warns (`lint`) when a hook is too long to read in its time, when captions sit under the
+  app's buttons, or when a transition cannot be done as asked.
+
+### Quality
+- The fallback renderer (ffmpeg/ASS) sizes caption and hook text from the font's own metrics, so it matches the
+  main renderer (its captions were about 25% smaller before).
+- Fixed: photos were not read at ingest with ffmpeg 7.
+
+### Editions
+- New **Free** edition (same as Standard, its own repo).
+- **Newbie** now also learns the style of a sample video (`nve ref`, `nve style`), and is the only edition that
+  carries the whisper model mirror on GitHub.
+
 ## 0.9.0 — 2026-11-14
 - Taste log (`nve taste`, `references/taste.md`): every correction the user makes is kept in `<workspace>/taste.json` in their words, with optional defaults (`--set style.*/output.*`), limits on storyboard metrics (`--max stamps_per_min=5`, …) and banned SFX/music. `nve plan draft` applies the defaults and bans, `nve plan refresh` / `nve preview` return `taste_warnings`, banned SFX are skipped in the mix (`style.ban_sfx`). Cloud: `nve taste export` / `import` carry it between chats. Idea from kurbaitaev/ghost-editor (MIT).
 - Sample style by hand (`references/analyze.md`): when the user shows a sample video, Claude takes its design language (fonts, colours, text treatments, pace, music feel) and applies it to the user's own footage and words; the sample's content is never copied and the scratch project is deleted afterwards.

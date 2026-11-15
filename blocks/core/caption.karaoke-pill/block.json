@@ -2,15 +2,44 @@
   "id": "core:caption.karaoke-pill",
   "version": "1",
   "kind": "caption",
-  "label": {"vi": "Phụ đề karaoke trên nền tối", "en": "Karaoke captions on a dark pill"},
+  "variant": "pill",
+  "label": {
+    "vi": "Phụ đề karaoke trên nền tối",
+    "en": "Karaoke captions on a dark pill"
+  },
   "description": "3-5 word groups on a dark rounded pill; each word lights up as it is spoken, keywords turn accent colour with a small pop.",
-  "engines": ["hyperframes", "ass"],
+  "engines": [
+    "hyperframes",
+    "ass"
+  ],
   "props": {
-    "group_min": {"type": "integer", "default": 3},
-    "group_max": {"type": "integer", "default": 5},
-    "keywords": {"type": "array", "default": [], "doc": "words to highlight in the accent colour"},
-    "top": {"type": "number", "default": 0.77, "doc": "top edge as a fraction of frame height"},
-    "size": {"type": "number", "default": 0.0556, "doc": "font size as a fraction of frame width"}
+    "group_min": {
+      "type": "integer",
+      "default": 3
+    },
+    "group_max": {
+      "type": "integer",
+      "default": 5
+    },
+    "keywords": {
+      "type": "array",
+      "default": [],
+      "doc": "words to highlight in the accent colour"
+    },
+    "top": {
+      "type": "number",
+      "default": 0.77,
+      "doc": "top edge as a fraction of frame height"
+    },
+    "size": {
+      "type": "number",
+      "default": 0.0556,
+      "doc": "font size as a fraction of frame width"
+    },
+    "uppercase": {
+      "type": "boolean",
+      "default": false
+    }
   },
   "default_sfx": []
 }

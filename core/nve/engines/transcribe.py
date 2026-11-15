@@ -36,6 +36,15 @@ def _multipart(fields: dict[str, str], file_field: str, file_path: Path) -> tupl
     return b"".join(parts), f"multipart/form-data; boundary={b}"
 
 
+
+def model_mirror():
+    """nve.resources when this edition ships it (Newbie only), else None."""
+    try:
+        from nve import resources
+    except ImportError:
+        return None
+    return resources
+
 class Scribe(Engine):
     id, capability = "scribe", "transcribe"
 
@@ -138,12 +147,12 @@ class FasterWhisper(Engine):
 
     @staticmethod
     def _model_source(ctx: Ctx) -> tuple[str | None, bool]:
-        """(why unavailable, may use nve-resources). The model comes from Hugging Face or, when the edition
-        lists it in `resources` (newbie), from the nve-resources git repo (see nve.resources)."""
-        from nve import resources
+        """(why unavailable, may use the mirror). The model comes from Hugging Face; only an edition that ships a
+        model mirror (module nve.resources, Newbie) can also fetch it from git."""
+        resources = model_mirror()
         net = ctx.env.get("network") or {}
-        mirror = "whisper-small" in ((ctx.env.get("edition") or {}).get("resources") or [])
-        if os.environ.get("NVE_WHISPER_MODEL") or resources.is_cached("whisper-small"):
+        mirror = resources is not None and "whisper-small" in ((ctx.env.get("edition") or {}).get("resources") or [])
+        if os.environ.get("NVE_WHISPER_MODEL") or (mirror and resources.is_cached("whisper-small")):
             return None, mirror
         if net.get("huggingface.co") is False and not (mirror and net.get("github.com", True)):
             return "whisper model download blocked (huggingface.co)", mirror
@@ -197,13 +206,13 @@ class FasterWhisper(Engine):
 
 
     def _load_model(self, WhisperModel, ctx: Ctx):
-        from nve import resources
+        resources = model_mirror()
         load = lambda src: WhisperModel(src, device="cpu", compute_type="int8")  # noqa: E731
         _, mirror = self._model_source(ctx)
         name = os.environ.get("NVE_WHISPER_MODEL")
         if name:
             return load(name)
-        if resources.is_cached("whisper-small"):
+        if mirror and resources.is_cached("whisper-small"):
             return load(str(resources.cache_dir("whisper-small")))
         hf_blocked = (ctx.env.get("network") or {}).get("huggingface.co") is False
         if not hf_blocked:
@@ -212,7 +221,7 @@ class FasterWhisper(Engine):
             except Exception as e:  # noqa: BLE001
                 if not mirror:
                     raise EngineUnavailable(f"model download failed twice ({str(e)[:120]}; {ALLOWLIST_HINT})") from e
-                log(f"Hugging Face download failed ({str(e)[:80]}); using nve-resources on GitHub")
+                log(f"Hugging Face download failed ({str(e)[:80]}); using the model mirror on GitHub")
         if not mirror:
             raise EngineUnavailable("whisper model download blocked (huggingface.co)")
         try:

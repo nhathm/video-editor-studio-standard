@@ -1,0 +1,64 @@
+{
+  "id": "core:media.frame",
+  "version": "1",
+  "kind": "overlay",
+  "label": {
+    "vi": "B-roll trong khung bo góc",
+    "en": "B-roll in a rounded frame"
+  },
+  "description": "A video clip or photo in a rounded frame with a white border and a shadow, over the talking video (picture-in-picture) while the voice keeps going. Pops in and out. The clip plays muted from `in`. Keep it above the captions and off the face when you can.",
+  "engines": [
+    "hyperframes",
+    "ass"
+  ],
+  "props": {
+    "src": {
+      "type": "string",
+      "required": true,
+      "doc": "project path (source/x.mp4, assets/x.jpg) or lib:img/<name>"
+    },
+    "in": {
+      "type": "number",
+      "default": 0,
+      "doc": "video only: start time inside the clip (seconds)"
+    },
+    "top": {
+      "type": "number",
+      "default": 0.12,
+      "doc": "fraction of frame height"
+    },
+    "width": {
+      "type": "number",
+      "default": 0.8,
+      "doc": "fraction of frame width"
+    },
+    "aspect": {
+      "type": "string",
+      "default": "4:3",
+      "doc": "frame shape, e.g. 4:3, 1:1, 16:9, 4:5"
+    },
+    "radius": {
+      "type": "number",
+      "default": 0.045,
+      "doc": "corner radius as a fraction of frame width"
+    },
+    "border": {
+      "type": "string",
+      "default": "#FFFFFF",
+      "doc": "border colour; empty = none"
+    },
+    "anim": {
+      "type": "string",
+      "default": "pop",
+      "doc": "pop | slide-up | fade"
+    }
+  },
+  "min_duration": 0.8,
+  "default_sfx": [
+    {
+      "asset": "lib:sfx/whoosh-short",
+      "at": -0.05,
+      "volume": 0.3
+    }
+  ]
+}

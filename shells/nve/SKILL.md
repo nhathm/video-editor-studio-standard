@@ -1,6 +1,6 @@
 ---
 name: nve
-description: Edit videos end to end with nve-studio. The user drops in raw videos/photos (talking head, product footage, green screen, everyday clips) and wants a finished short video with cuts, filler removal, colour look, karaoke captions, highlight stamps, emoji, SFX and music. Plans a storyboard, previews stills, renders, checks quality. Use for "/nve", "edit this video", "dựng video", "cắt video", "làm video quảng cáo", "làm như cũ".
+description: Edit videos end to end with nve-studio. The user drops in raw videos/photos (talking head, product footage, green screen, everyday clips) and wants a finished short video with cuts, filler removal, colour look, word-highlight captions, an opening hook title, highlight stamps, emoji, B-roll frames, transitions, SFX and music. Plans a storyboard, previews stills, renders, checks quality. Use for "/nve", "edit this video", "dựng video", "cắt video", "làm video quảng cáo", "làm như cũ".
 ---
 
 # nve (shell skill)

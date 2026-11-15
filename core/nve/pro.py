@@ -1,4 +1,5 @@
-"""Bridge to the Pro features in <install>/pro/python/nve_pro (the public editions do not ship pro/)."""
+"""Bridge to the reference style features in <install>/pro/python/nve_pro (Pro and Newbie; Standard and Free
+do not ship them)."""
 from __future__ import annotations
 
 import importlib

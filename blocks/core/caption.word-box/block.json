@@ -1,0 +1,45 @@
+{
+  "id": "core:caption.word-box",
+  "version": "1",
+  "kind": "caption",
+  "variant": "box",
+  "label": {
+    "vi": "Từ đang nói nằm trong ô màu",
+    "en": "Current word in a colour box"
+  },
+  "description": "White outlined text, no pill; a rounded accent-colour box jumps to each word as it is spoken (word in the ink colour on the box). Keywords stay accent.",
+  "engines": [
+    "hyperframes",
+    "ass"
+  ],
+  "props": {
+    "group_min": {
+      "type": "integer",
+      "default": 2
+    },
+    "group_max": {
+      "type": "integer",
+      "default": 4
+    },
+    "keywords": {
+      "type": "array",
+      "default": [],
+      "doc": "words that stay in the accent colour (product names, numbers, the CTA name)"
+    },
+    "top": {
+      "type": "number",
+      "default": 0.68,
+      "doc": "top edge as a fraction of frame height; keep it above the app's buttons and description (<= 0.75 on TikTok/Reels)"
+    },
+    "size": {
+      "type": "number",
+      "default": 0.072,
+      "doc": "font size as a fraction of frame width"
+    },
+    "uppercase": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "default_sfx": []
+}

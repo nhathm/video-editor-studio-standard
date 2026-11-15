@@ -13,7 +13,8 @@ edges out of them, so cuts and caption timing stay right. You only fix the text.
 1. `nve transcript show <p>` prints, per source, numbered words grouped by phrase:
    `[5.7s] 14:chất 15:sơ 16:tốt, 17:rau 18:xanh, 19:đậu 20:bóc, …`
 2. Read it as a whole: what is the video about (product, topic)? Fix words that are wrong **in that
-   context**. Also add sentence punctuation where it helps captions (a word may become "đúng." or "insulin,").
+   context**. Also add sentence punctuation where it helps captions (a word may become "đúng." or "insulin,"); the caption
+   lines themselves are set later with `style.caption.phrases`.
 3. Write `analysis/transcripts/<src>.corrections.json` (in the workspace project, never in the install folder):
    ```json
    {"source": "a", "reviewer": "claude", "fixes": [

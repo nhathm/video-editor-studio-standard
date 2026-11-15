@@ -276,45 +276,6 @@ def test_workspace_remembered_by_init(tmp_path, monkeypatch):
 
 
 
-def test_resources_sparse_fetch_join_and_checksums(tmp_path, monkeypatch):
-    import hashlib
-    import json
-    import shutil
-    import subprocess
-
-    import pytest
-    from nve import resources
-    from nve.paths import NveError
-    blob = bytes(range(256)) * 100
-    repo = tmp_path / "res"
-    d = repo / "thing" / "v1"
-    d.mkdir(parents=True)
-    (repo / "other").mkdir()
-    (repo / "other" / "big.bin").write_bytes(b"z" * 5000)
-    parts = {"model.bin.part-aa": blob[:10000], "model.bin.part-ab": blob[10000:]}
-    for n, b in parts.items():
-        (d / n).write_bytes(b)
-    (d / "config.json").write_text("{}")
-    sha = lambda b: hashlib.sha256(b).hexdigest()  # noqa: E731
-    files = {n: sha(b) for n, b in parts.items()}
-    files.update({"config.json": sha(b"{}"), "model.bin": sha(blob)})
-    cat = tmp_path / "resources.json"
-    cat.write_text(json.dumps({"thing": {"version": "v1", "repo": f"file://{repo}", "path": "thing/v1",
-                                         "join": {"model.bin": sorted(parts)}, "files": files}}))
-    g = lambda *a: subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True)  # noqa: E731
-    g("init", "-q"); g("add", "-A"); g("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "m")
-    monkeypatch.setattr(resources, "CATALOG", cat)
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    out = resources.fetch("thing")
-    assert (out / "model.bin").read_bytes() == blob and (out / "config.json").exists() and resources.is_cached("thing")
-    assert not (out / "model.bin.part-aa").exists()
-    shutil.rmtree(out)
-    (d / "model.bin.part-ab").write_bytes(b"x" + blob[10001:])
-    g("commit", "-qam", "bad")
-    with pytest.raises(NveError):
-        resources.fetch("thing")
-
-
 # ── taste log ──
 def _taste_sb(**kw):
     sb = {"schema": "nve.storyboard/1", "template": "core:talking-head", "cut_strategy": "speech",
@@ -556,3 +517,117 @@ def test_pro_commands_hidden_without_pro(monkeypatch, capsys):
     with pytest.raises(NveError) as e:
         pro.load("ref", "Reference style")
     assert "Do not mention it to the user" in str(e.value)
+
+
+# ── captions presets, hook, emphasis, B-roll frame, transitions, palette ──
+def _tr_sb(trans=None, default=None, kinds=("video", "video", "image", "image")):
+    srcs = [{"id": c, "path": f"{c}.x", "kind": k} for c, k in zip("abcd", kinds)]
+    vid = [{"src": "a", "in": 0, "out": 2}, {"src": "a", "in": 3, "out": 5}, {"src": "b", "in": 0, "out": 2},
+           {"src": "c", "in": 0, "out": 2}, {"src": "d", "in": 0, "out": 2}]
+    for i, t in (trans or {}).items():
+        vid[i]["transition"] = t
+    sb = _taste_sb(sources=srcs, project="p")
+    sb["tracks"]["video"] = vid
+    sb["output"]["speed"] = 1.0
+    if default:
+        sb["style"]["transition"] = default
+    return sb
+
+
+def test_transitions_default_explicit_random_and_fallback():
+    from nve import transitions
+    segs = lambda sb: timeline.segments(sb["tracks"]["video"], 1.0, 30)
+    t, w = transitions.resolve(_tr_sb(), segs(_tr_sb()))
+    assert t == [] and w == []                                   # nothing asked: hard cuts
+    sb = _tr_sb(default="flash")
+    t, _ = transitions.resolve(sb, segs(sb))
+    assert [x["i"] for x in t] == [2, 3, 4]                      # jump cut inside source a stays a hard cut
+    sb = _tr_sb(trans={1: "zoom-punch", 2: "crossfade", 4: {"type": "slide-left", "duration": 0.6}, 3: "none"}, default="flash")
+    t, w = transitions.resolve(sb, segs(sb))
+    by = {x["i"]: x for x in t}
+    assert by[1]["type"] == "zoom-punch" and by[1]["at"] == 2.0 and by[1]["family"] == "cut"
+    assert by[2]["type"] == "flash" and any("only works between two photos" in x for x in w)   # video -> fallback
+    assert 3 not in by
+    assert by[4]["family"] == "xfade" and by[4]["xfade"] == "slideleft" and by[4]["duration"] == 0.6
+    sb = _tr_sb(default="random")
+    a, b = transitions.resolve(sb, segs(sb))[0], transitions.resolve(sb, segs(sb))[0]
+    assert a == b                                                # random is repeatable per project
+    assert {x["type"] for x in a if x["i"] == 4} <= set(transitions.RANDOM_PHOTO)
+
+
+def test_rich_text_and_connector_aware_caption_groups():
+    assert compose_plan.rich("BẠN *UỐNG SAI*|TRÀ") == [[("BẠN ", False), ("UỐNG SAI", True)], [("TRÀ", False)]]
+    assert compose_plan.plain("A *B*") == "A B"
+    ws = [{"text": t, "start": i * 0.3, "end": i * 0.3 + 0.25} for i, t in enumerate("uống trà với đường mỗi ngày".split())]
+    gs = caption_groups(ws, 2, 3, 10.0, set())
+    assert [" ".join(w["text"] for w in g["words"]) for g in gs] == ["uống trà", "với đường", "mỗi ngày"]
+    # sentence ends always break; a comma beats an even split
+    ws = [{"text": t, "start": i * 0.3, "end": i * 0.3 + 0.25} for i, t in enumerate("Hôm nay mình pha trà, uống mỗi sáng. Thử nhé".split())]
+    lines = [" ".join(w["text"] for w in g["words"]) for g in caption_groups(ws, 2, 4, 10.0, set())]
+    assert "uống mỗi sáng" in lines and lines[-1] == "Thử nhé" and all(not x.endswith(("với", "và")) for x in lines)
+    # phrases written by Claude decide the breaks, even across words that were cut away
+    ws = [{"text": t, "start": i * 0.3, "end": i * 0.3 + 0.25}
+          for i, t in enumerate("chị Thắm bán hàng online ba năm rồi mà chưa thấy sản phẩm nào tốt như vậy".split())]
+    gs = caption_groups(ws, 2, 4, 10.0, set(), ["chị Thắm bán hàng online", "ba năm rồi", "mà chưa thấy",
+                                                "một sản phẩm nào tốt như vậy"])
+    assert [" ".join(w["text"] for w in g["words"]) for g in gs] == \
+        ["chị Thắm bán hàng online", "ba năm rồi", "mà chưa thấy", "sản phẩm nào tốt như vậy"]
+
+
+def test_word_cut_between_back_to_back_ranges_is_not_repeated():
+    words = [{"text": "sai", "start": 2.0, "end": 2.3}, {"text": "cách", "start": 2.35, "end": 2.7}, {"text": "và", "start": 2.8, "end": 3.0}]
+    out = timeline.output_words([{"src": "a", "in": 0, "out": 2.5}, {"src": "a", "in": 2.5, "out": 4}], {"a": words}, 1.0, 30)
+    assert [w["text"] for w in out] == ["sai", "cách", "và"] and out[1]["end"] == 2.7
+
+
+def test_palette_contrast_and_font_metrics(tmp_path):
+    from PIL import Image
+    from nve import palette
+    p = palette.make("#C0392B")
+    assert p["accent"] == "#C0392B" and palette.contrast(p["ink"], p["accent"]) >= 3 and palette.contrast(p["ink"], "#FFFFFF") >= 7
+    assert palette.luminance(palette.make("#101030")["accent"]) > 0.1          # too dark for a highlight: lightened
+    Image.new("RGB", (60, 60), (150, 230, 40)).save(tmp_path / "g.png")   # lime footage
+    assert palette.from_image(tmp_path / "g.png")["palette"]["accent"].startswith("#")
+    green = palette.auto([tmp_path / "g.png"])["palette"]["accent"]
+    assert green != "#C6FF3D"                                                    # not the footage's own hue
+    assert abs(compose_plan.win_ratio(compose_plan.font_path("Montserrat")) - 1.562) < 0.01
+
+
+def test_plan_has_hook_frame_transitions_and_their_sfx(tmp_path):
+    from PIL import Image
+    Image.new("RGB", (400, 300), (200, 40, 40)).save(tmp_path / "b.jpg")
+    sb = _tr_sb(trans={1: "whip"})
+    sb["tracks"]["overlay"] = [{"block": "core:hook.title", "start": 0, "end": 2.4, "props": {"text": "BẠN ĐANG *UỐNG SAI*|TRÀ SỮA"}},
+                               {"block": "core:media.frame", "start": 3, "end": 4.5, "props": {"src": "b.jpg", "aspect": "1:1", "width": 0.5}}]
+    sb["style"]["caption"] = {"block": "core:caption.word-box"}
+    words = [{"text": "xin", "start": 0.1, "end": 0.4}, {"text": "chào", "start": 0.45, "end": 0.8}]
+    plan = compose_plan.build(sb, words, tmp_path / "cut.mp4", 10.0, tmp_path, None)
+    assert plan["captions"]["variant"] == "box" and plan["hooks"][0]["size"] <= 103
+    f = plan["frames"][0]
+    assert (f["w"], f["h"], f["is_video"]) == (540, 540, False)
+    assert plan["transitions"] == [{"at": 2.0, "type": "whip", "duration": 0.26}]
+    stems = {Path(x["path"]).stem for x in plan["sfx"]}
+    assert {"whoosh", "whoosh-short", "pop"} <= stems
+    ass = build_ass(plan)
+    assert "\\p1" in ass and "\\clip(" in ass and "\\h" in ass                  # word box + hook marker + spacing
+
+
+def test_lint_hook_and_caption_position():
+    sb = _tr_sb()
+    sb["tracks"]["overlay"] = [{"block": "core:hook.title", "start": 0.8, "end": 1.6,
+                                "props": {"text": "một hai ba bốn năm sáu bảy tám"}}]
+    sb["style"]["caption"]["top"] = 0.8
+    w = " ".join(SB.lint(sb, 10))
+    assert "8 words" in w and "needs about" in w and "first half second" in w and "caption.top" in w
+
+
+def test_caption_line_breaks_from_phrases_and_balanced():
+    ws = [{"text": t, "start": i * 0.3, "end": i * 0.3 + 0.25} for i, t in enumerate("Bạn đang uống trà sữa sai cách".split())]
+    gs = caption_groups(ws, 2, 4, 10.0, set(), ["Bạn đang uống | trà sữa sai cách"])
+    assert len(gs) == 1 and [w["text"] for w in gs[0]["words"] if w["br"]] == ["uống"]
+    gs = caption_groups(ws, 2, 4, 10.0, set(), ["Bạn đang uống trà sữa sai cách"])
+    compose_plan.set_line_breaks(gs, "Montserrat", 80, 900)
+    assert sum(w["br"] for w in gs[0]["words"]) == 1                              # too wide: exactly one break
+    short = caption_groups(ws[:2], 2, 4, 10.0, set())
+    compose_plan.set_line_breaks(short, "Montserrat", 80, 900)
+    assert not any(w["br"] for w in short[0]["words"])

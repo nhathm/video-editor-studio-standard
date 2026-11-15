@@ -187,6 +187,42 @@ def cmd_block(a):
          for i, it in registry.scan("block", ws).items()])
 
 
+def cmd_transitions(a):
+    from nve.transitions import catalog
+    out(catalog())
+
+
+def cmd_palette(a):
+    import tempfile
+    from nve import palette
+    from nve.util import run
+    if a.accent:
+        out({"palette": palette.make(a.accent), "how": "from the colour the user named"})
+        return
+    if a.image:
+        out(palette.from_image(Path(a.image).expanduser()))
+        return
+    if not a.project:
+        raise NveError("Give a project (automatic choice from its footage), --image <file> or --accent <#hex>.")
+    ctx = _ctx()
+    prj = _prj(ctx, a.project)
+    ing = json.loads(prj.p("analysis", "ingest.json").read_text()) if prj.p("analysis", "ingest.json").exists() else {"sources": []}
+    frames, tmp = [], Path(tempfile.mkdtemp(prefix="nve-pal-"))
+    for x in ing["sources"][:4]:
+        if x["kind"] == "image":
+            frames.append(prj.p(x["rel"]))
+        elif x["kind"] == "video":
+            for k, f in enumerate((0.2, 0.5, 0.8)):
+                fp = tmp / f"{x['id']}_{k}.jpg"
+                run(["ffmpeg", "-v", "error", "-y", "-ss", f"{x['duration'] * f:.2f}", "-i", str(prj.p(x["rel"])),
+                     "-frames:v", "1", "-vf", "scale=200:-2", str(fp)], check=False)
+                if fp.exists():
+                    frames.append(fp)
+    if not frames:
+        raise NveError("No footage to look at yet: run `nve ingest` first, or pass --image / --accent.")
+    out(palette.auto(frames))
+
+
 def cmd_assets(a):
     from nve.assets import fetch_bgm, list_assets
     from nve.env import detect_edition
@@ -339,6 +375,10 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("action", choices=["list", "show", "fork"]); p.add_argument("id", nargs="?"); p.add_argument("name", nargs="?")
     p.set_defaults(fn=cmd_template)
     p = sp.add_parser("block", help="list blocks"); p.set_defaults(fn=cmd_block)
+    p = sp.add_parser("transitions", help="list transitions between cuts"); p.set_defaults(fn=cmd_transitions)
+    p = sp.add_parser("palette", help="text colours: from a reference picture, one named colour, or automatic from the footage")
+    p.add_argument("project", nargs="?"); p.add_argument("--image", help="reference picture the user sent")
+    p.add_argument("--accent", help="the colour the user named, as #RRGGBB"); p.set_defaults(fn=cmd_palette)
     p = sp.add_parser("assets", help="list assets, or fetch a HeyGen catalog track into the library")
     p.add_argument("action", choices=["list", "fetch-bgm"]); p.add_argument("type", nargs="?", choices=["sfx", "bgm", "img", "lottie"])
     p.add_argument("--intent", help="fetch-bgm: mood in words"); p.add_argument("--name", help="fetch-bgm: library name")

@@ -147,6 +147,30 @@
               },
               "mute": {
                 "type": "boolean"
+              },
+              "transition": {
+                "description": "transition INTO this range: a name from `nve transitions`, {\"type\", \"duration\"}, or \"none\"",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "type"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string"
+                      },
+                      "duration": {
+                        "type": "number",
+                        "minimum": 0.05,
+                        "maximum": 1.5
+                      }
+                    }
+                  }
+                ]
               }
             }
           }

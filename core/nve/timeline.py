@@ -120,10 +120,20 @@ def load_words(transcript: Path) -> list[dict]:
 def output_words(video_track: list[dict], transcripts: dict[str, list[dict]], speed: float, fps: int,
                  fixes: dict[str, str] | None = None, keep_fillers: bool = False) -> list[dict]:
     out: list[dict] = []
+    prev = None
     for s in segments(video_track, speed, fps):
+        joined = prev is not None and prev["src"] == s["src"] and abs(prev["out"] - s["in"]) < 1e-3
+        prev = s
         for w in transcripts.get(s["src"], []):
             if w["end"] <= s["in"] or w["start"] >= s["out"]:
                 continue
+            if joined and w["start"] < s["in"] and out and out[-1].get("_src_start") == w["start"]:
+                # the same word continues across a cut between back-to-back ranges: extend it instead of repeating it
+                out[-1]["end"] = round((min(s["out"], w["end"]) - s["in"]) / s["speed"] + s["out_start"], 3)
+                continue
+            inside = min(s["out"], w["end"]) - max(s["in"], w["start"])
+            if inside < 0.5 * (w["end"] - w["start"]):
+                continue   # a word cut at the edge of a range belongs to the range that holds most of it
             text = clean_text(w.get("text", ""))
             if not text or (not keep_fillers and is_filler(text)):
                 continue
@@ -134,7 +144,10 @@ def output_words(video_track: list[dict], transcripts: dict[str, list[dict]], sp
             we = min(we, s["out_start"] + s["out_dur"])
             if we <= ws:
                 we = ws + 0.05
-            out.append({"id": f"w{len(out)}", "text": text, "start": round(ws, 3), "end": round(we, 3), "src": s["src"]})
+            out.append({"id": f"w{len(out)}", "text": text, "start": round(ws, 3), "end": round(we, 3), "src": s["src"],
+                        "_src_start": w["start"]})
+    for w in out:
+        w.pop("_src_start", None)
     return out
 
 

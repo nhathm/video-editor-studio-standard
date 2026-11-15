@@ -95,8 +95,8 @@ def get_key(name: str, ws: Path | None) -> str | None:
 
 
 def detect_edition() -> dict:
-    """Public exports carry EDITION.json (tier standard/newbie; `resources`: ids from resources.json the
-    edition may fetch from git, e.g. newbie's whisper model).
+    """Public exports carry EDITION.json (tier standard/newbie; `resources`: models the edition may fetch from
+    its own mirror, Newbie only).
     Without it: the private repo (has pro/) is Pro, anything else Standard."""
     f = INSTALL_ROOT / "EDITION.json"
     if f.exists():
@@ -187,7 +187,8 @@ def doctor(ws: Path | None, refresh: bool = False, deep: bool = False) -> dict:
         captions.append("scribe")
     if reach("huggingface.co"):
         captions.append("whisper")
-    if "whisper-small" in (edition.get("resources") or []) and reach("github.com"):
+    from importlib.util import find_spec
+    if "whisper-small" in (edition.get("resources") or []) and find_spec("nve.resources") and reach("github.com"):
         captions.append("whisper-git")
     level = "L0" + ("+elevenlabs" if keys["elevenlabs"] else "") + ("+heygen" if heygen else "")
     data = {"nve_version": __version__, "checked_at": int(time.time()), "runtime": runtime,
@@ -210,7 +211,7 @@ def format_report(d: dict) -> str:
         f"  {ok(d['node'])} node >=22 {d['node']['version'] if d['node'] else 'missing -> HyperFrames unavailable, using ffmpeg/ASS'}",
         f"  {ok(d['opencv'])} opencv (skin retouch; without it the look uses an ffmpeg approximation)",
         *([f"  {ok(t.get('yt-dlp'))} yt-dlp {t.get('yt-dlp') or 'missing -> reference links cannot be downloaded (send the file instead)'}"]
-          if d["edition"].get("tier") == "pro" else []),
+          if d["tools"].get("yt-dlp") is not None or (PRO_ROOT / "python" / "nve_pro").is_dir() else []),
         f"  {ok(k['elevenlabs'])} ElevenLabs key {'set' if k['elevenlabs'] else 'not set -> whisper transcripts (run: nve connect elevenlabs)'}",
         f"  {ok(k['heygen'])} HeyGen login {'' if k['heygen'] is not None else '(not checked; nve doctor --deep)'}",
     ]
@@ -225,7 +226,7 @@ def format_report(d: dict) -> str:
             if (d.get("edition") or {}).get("tier") == "standard":
                 lines.append("     (with Claude Pro you can allow the download hosts and get automatic captions)")
         elif caps == ["whisper-git"]:
-            lines.append("  -> captions: whisper model from nve-resources on GitHub (Hugging Face blocked)")
+            lines.append("  -> captions: whisper model from the GitHub mirror (Hugging Face blocked)")
         if not all(v for h, v in net.items() if h != "github.com") and caps != ["whisper-git"]:
             lines.append("  -> Claude Pro or higher: Settings > Capabilities (web or desktop app) > Additional allowed domains: "
                          + ", ".join(ALLOWLIST_DOMAINS) + ". Account-wide; then start a new chat.")

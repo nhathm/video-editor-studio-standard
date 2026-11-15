@@ -40,6 +40,34 @@ def validate(sb: dict) -> list[str]:
     return errors
 
 
+def lint(sb: dict, duration: float) -> list[str]:
+    """Editorial checks that are not errors: hook too long to read, text under the app's buttons, transitions
+    that cannot be done as asked."""
+    from nve import transitions
+    out: list[str] = []
+    o, st = sb["output"], sb.get("style", {})
+    vertical = o["height"] > o["width"]
+    cap = st.get("caption") or {}
+    if vertical and cap.get("block") not in (None, "none") and float(cap.get("top", 0.68)) > 0.75:
+        out.append(f"style.caption.top {cap['top']}: captions may sit under the app's buttons and description; keep top <= 0.75")
+    for i, ov in enumerate(sb["tracks"].get("overlay", [])):
+        text = str((ov.get("props") or {}).get("text", "")).replace("*", "")
+        if ov["block"].endswith("hook.title"):
+            n = len(text.replace("|", " ").split())
+            d = ov["end"] - ov["start"]
+            if n > 7:
+                out.append(f"tracks/overlay/{i}: hook has {n} words; 2-6 words read in time")
+            if d < 0.6 + n / 3.5:
+                out.append(f"tracks/overlay/{i}: hook shows {d:.1f}s, needs about {0.6 + n / 3.5:.1f}s to read")
+            if ov["start"] > 0.5:
+                out.append(f"tracks/overlay/{i}: hook starts at {ov['start']}s; it should be on screen in the first half second")
+        if text.count("|") >= 2 and ov["block"].endswith(("stamp.slam", "hook.title")):
+            out.append(f"tracks/overlay/{i}: more than 2 lines of text")
+    if sb["tracks"]["video"]:
+        out += transitions.resolve(sb, segments(sb["tracks"]["video"], o.get("speed", 1.0), o["fps"]))[1]
+    return out
+
+
 def apply_template(sb: dict, template: dict) -> dict:
     """Template defaults fill whatever the storyboard leaves out; the storyboard always wins."""
     d = template.get("defaults", {})

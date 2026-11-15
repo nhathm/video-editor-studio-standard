@@ -1,0 +1,45 @@
+{
+  "id": "core:caption.pop-word",
+  "version": "1",
+  "kind": "caption",
+  "variant": "pop",
+  "label": {
+    "vi": "Chữ to bật từng cụm 1-3 từ",
+    "en": "Big pop-in, 1-3 words at a time"
+  },
+  "description": "Very large outlined words, 1-3 at a time, each group pops in (scale bounce); the spoken word turns accent. High energy: vlog, hype, product.",
+  "engines": [
+    "hyperframes",
+    "ass"
+  ],
+  "props": {
+    "group_min": {
+      "type": "integer",
+      "default": 1
+    },
+    "group_max": {
+      "type": "integer",
+      "default": 3
+    },
+    "keywords": {
+      "type": "array",
+      "default": [],
+      "doc": "words that stay in the accent colour (product names, numbers, the CTA name)"
+    },
+    "top": {
+      "type": "number",
+      "default": 0.62,
+      "doc": "top edge as a fraction of frame height; keep it above the app's buttons and description (<= 0.75 on TikTok/Reels)"
+    },
+    "size": {
+      "type": "number",
+      "default": 0.095,
+      "doc": "font size as a fraction of frame width"
+    },
+    "uppercase": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "default_sfx": []
+}
